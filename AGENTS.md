@@ -13,14 +13,17 @@ Python requests 采集(NDJSON) → HDFS → Hive ODS → Spark SQL DWD/DWS/ADS �
 ## Repo Layout
 
 ```
-hadoop_lab/
+Bilibili-Hot-Video-Analysis-Platform/
+├── AGENTS.md                # 项目约定与 Agent 指令
+├── history.md               # 项目全阶段操作留痕（报告素材）
 ├── docs/plan.md             # 完整开发指南（必读）
 ├── api-demo/                # B站 API 调用示例，8 个端点均有可运行 Demo
 ├── crawler/                 # 采集脚本（待实现）
 ├── sql/                     # Hive/Spark/MySQL DDL 和 ETL SQL（待实现）
 ├── backend/src/             # Rust Axum 只读 API（待实现）
 ├── frontend/src/            # React + ECharts 大屏（待实现）
-├── scripts/                 # 自动化脚本
+├── scripts/
+│   └── qemu/                # QEMU/libvirt 虚拟机管理脚本
 ├── mapreduce/               # MapReduce 作业（标题词频统计）
 ├── output/                  # 采集数据
 ├── report/                  # 课程报告
@@ -41,6 +44,72 @@ hadoop_lab/
 | 前端 | React 18 + TypeScript + ECharts |
 | 后端 | Rust Axum，8 个 GET 端点，端口 3000，CORS 全开 |
 | 错误码 | 0=成功，400=参数错误，500=内部错误 |
+
+## Cluster Architecture
+
+Hadoop 集群运行在 WSL Ubuntu 上的 libvirt 管理的 3 台 CentOS 7 虚拟机中。
+
+| 节点 | IP | 内存 | CPU | 角色 |
+|---|---|---|---|---|
+| master | 192.168.100.10 | 4G | 2 | NameNode, DataNode, ResourceManager, NodeManager, Hive Metastore, HiveServer2, Spark Master, Spark Worker, Spark History Server, MySQL 8 |
+| worker1 | 192.168.100.11 | 2G | 2 | DataNode, NodeManager, Spark Worker |
+| worker2 | 192.168.100.12 | 2G | 2 | DataNode, NodeManager, Spark Worker |
+
+**连接方式**：
+```bash
+ssh UbuntuDesktop                     # 进入 WSL（通过反向隧道）
+ssh hadoop@192.168.100.10             # master
+ssh hadoop@192.168.100.11             # worker1
+ssh hadoop@192.168.100.12             # worker2
+# 密码: hadoop123
+```
+
+**数据库密码**：
+| 服务 | 用户 | 密码 |
+|---|---|---|
+| MySQL root | root | Root@123456 |
+| MySQL hive | hive | Hive@123456 |
+| Hive Metastore | hive | Hive@123456 |
+
+**集群管理**：
+```bash
+# HDFS
+hdfs dfsadmin -report
+hdfs dfs -ls /
+
+# YARN
+yarn node -list
+yarn application -list
+
+# Hive
+hive -e "SHOW DATABASES;"
+beeline -u "jdbc:hive2://master:10000"
+
+# Spark
+spark-shell --master spark://master:7077
+spark-sql --master spark://master:7077
+
+# 启停
+start-dfs.sh && start-yarn.sh
+stop-yarn.sh && stop-dfs.sh
+hive --service metastore &
+hive --service hiveserver2 &
+/opt/spark/sbin/start-all.sh
+/opt/spark/sbin/start-history-server.sh
+/opt/spark/sbin/stop-all.sh
+```
+
+**libvirt 管理**：
+```bash
+virsh list --all
+virsh start master
+virsh shutdown master
+virsh net-dhcp-leases hadoop-net
+```
+
+**网络**：libvirt 自定义 NAT 网络 `hadoop-net` (192.168.100.0/24)，DHCP 静态绑定。
+
+**详细搭建记录**：`history.md`
 
 ## API Contract
 
@@ -63,7 +132,7 @@ hadoop_lab/
 
 - [x] `docs/plan.md` 完成
 - [x] `api-demo/` 8 个 B站 API 全部验证通过、Demo 可运行
-- [ ] Hadoop/Hive/Spark 环境搭建
+- [x] Hadoop/Hive/Spark 环境搭建（Hadoop 3.3.6 + Hive 3.1.3 + Spark 3.5.3 集群已启动）
 - [ ] 采集脚本开发
 - [ ] Hive DDL + Spark SQL ETL
 - [ ] MySQL 建表 + 数据导出
