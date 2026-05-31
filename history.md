@@ -632,3 +632,88 @@ spark-sql --master spark://master:7077 -e "SHOW DATABASES;"
 | spark-defaults.sh 命名错误 | 应为 spark-defaults.conf，Spark 不读取 .sh |
 | Spark 缺少 MySQL JDBC driver | 从 Hive lib 复制 mysql-connector-j 到 spark/jars |
 | Spark 找不到 Hive metastore | 创建 hive-site.xml 软链接到 spark/conf |
+
+---
+
+## 2026-05-31 全天 — 爬虫架构重写与数据管线部署
+
+### 目标
+将爬虫从队列分摊模型重构为 per-video 事务模型，部署到 WSL 自动采集，打通 HDFS→Hive→Spark→MySQL 全链路。
+
+### 重构内容
+
+**模型变更**：
+- 删除 `queue_comments`/`queue_danmaku` 两张队列表及全部 CRUD 方法
+- 新增 `process_video()` 单视频事务编排器：/view → UP → 评论 → 弹幕
+- 新增 `fail_count` 失败追踪（≥3 永久放弃）和 `discover_new_items` 返回 retry 列表
+- 输出改为流式追加写入（除 rank_video 仍为批量 ~1000 行）
+- tqdm 单条全局进度条 + `pbar.write()` 逐视频状态行
+- systemd timer 从每 6h × 28 改为每天 1 轮 × 7 轮（`OnCalendar=daily`）
+
+**数据减法**：
+- 移除番剧(rid=13) — B站已下线
+- 移除每周必看 — API 返回 code=-352
+
+**Bug 修复**：
+| 问题 | 解决 |
+|---|---|
+| `snapshot_id` 格式不一致（HHmmss vs HHmm） | 统一为 `yyyyMMdd_HHmm` |
+| `deploy_crawler.sh` rsync 源路径错误 | `$SCRIPT_DIR` → `$CRAWLER_DIR` |
+| description 合并到 rank_video 未生效 | 在 `process_video` 中正确定向修改 row 后再合并 |
+| tqdm 4.67.3 + Python 3.13 兼容性 | `disable=not sys.stderr.isatty()` with screen TTY |
+| WBI 签名 `-352` 风控失败 | Cookie 中 `;` 被 bash 解析为命令分隔符，改用 `grep -o \| sed` 提取 |
+| 后台日志不实时写入 | screen 托管（TTY → 无缓冲问题） |
+
+### 数据管线建设
+
+**SQL 脚本**（部署在 `sql/`）：
+- `hive_ods_ddl.sql` — 4 张 Hive 外部表（JsonSerDe）
+- `spark_etl.sql` — ODS→DWD(5)→DWS(3)→ADS(7) 全链路
+- `mysql_ads_ddl.sql` — 7 张 MySQL ADS 表
+
+**管线脚本**（部署在 `scripts/`）：
+- `upload_hdfs.sh` — NDJSON → HDFS（从 WSL 通过 sshpass 上传）
+- `export_to_mysql.py` — PySpark JDBC 导出（TRUNCATE + INSERT）
+- `run_pipeline.sh` — 日常 ETL 编排
+- `setup_pipeline.sh` — 首次集群初始化
+- `start_crawler.sh` — screen 会话启动脚本（正确提取 Cookie）
+
+**集群部署验证**（在 master:192.168.100.10）：
+```bash
+# HDFS 目录
+hdfs dfs -ls /data/bilibili/ods/     # rank_video, video_comment, video_danmaku, up_info
+
+# Hive 表
+hive -e "SHOW TABLES;"               # ods_*_raw × 4
+
+# MySQL 表
+mysql -u hive -pHive@123456 bilibili -e "SHOW TABLES;"
+# ads_screen_overview, ads_hot_video_rank, ads_partition_compare,
+# ads_video_lifecycle, ads_partition_daily, ads_up_summary, ads_tag_cloud
+
+# Spark 连通
+spark-sql --master spark://master:7077 -e "SHOW DATABASES;"  # bilibili, default
+
+# YARN 节点
+yarn node -list                     # 3 nodes RUNNING
+```
+
+### 部署状态
+
+| 组件 | 位置 | 状态 |
+|---|---|---|
+| crawler | WSL `~/crawler/` | screen 会话运行中（14:37 启动） |
+| systemd timer | WSL user-level | active，明天 00:00 触发 |
+| Hive Metastore + HiveServer2 | master | RUNNING |
+| Spark Master + 2 Workers | master + worker1/2 | RUNNING |
+| MySQL 8.0.46 | master | RUNNING，数据库 bilibili 已就绪 |
+
+### 关键设计决策
+
+| 决策 | 理由 |
+|---|---|
+| 日结 vs 分摊 | 每天 1 轮贪心全量消费队列，保证每天数据完整，首日 ~7h 后续 <15min |
+| per-video 事务 vs 分步队列 | 队列模型维护复杂，事务模型天然保证数据一致性 |
+| UP 主独立提交 | 跨视频共享数据，不应因一个视频失败而丢弃 UP 信息 |
+| screen 托管 vs systemd | screen 提供 TTY → tqdm 动态进度条；systemd 用于自动定时触发 |
+| Cookie 提取 | `grep -o \| sed`，不能用 `xargs`（`;` 会被 bash 误解析） |
