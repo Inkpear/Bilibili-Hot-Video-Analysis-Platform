@@ -164,3 +164,6 @@ virsh net-dhcp-leases hadoop-net
 - Cookie 不硬编码，使用环境变量 `BILI_COOKIE`
 - Cookie 含分号时不能用 `export $(grep ... | xargs)` 提取（bash 会将 `;` 解析为命令分隔符），必须用 `grep -o | sed` 提取原始值
 - 采集部署在 WSL，通过 `screen -S crawler` 前台监控或 systemd timer 自动触发
+- systemd `Type=oneshot`：服务运行中 timer 触发会静默跳过，不启动第二个实例
+- 热门视频 tags 全空（B站数据现象），标签词云依赖 MapReduce 标题分词填补
+- 生命周期折线图 Day 1 仅有 1 个快照点（`view_growth=0`），至少需要 2 轮采集

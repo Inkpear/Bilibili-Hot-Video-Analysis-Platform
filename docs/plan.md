@@ -59,6 +59,10 @@ B站排行 API (Python requests)
 全部成功则标完成（has_detail/comments/danmaku 全部=1），任何一项失败则 fail_count++（≥3 永久放弃）。
 UP 主作为视频内嵌环节独立提交（成功即写入，不参与视频事务回滚）。
 
+> **已知数据限制**：
+> - B站热门视频 `/x/web-interface/view` 返回的 `tags` 字段全部为空（数据源现象，非代码问题）。标签词云需通过后续 Stage 的 MapReduce 标题分词填补。
+> - 生命周期图表（`ads_video_lifecycle`）Day 1 只有 1 个快照点，`view_growth=0`、`rank_change=0`。至少 2 天采集后才有增量和排名变化数据。
+
 | 数据类型 | 采集频率 | 去重键 | 说明 |
 |---|---|---|---|
 | 排行榜快照 | 每天 1 次 | `bvid + snapshot_id + rank_source` | 7 个时间点，每次全量采集 |
@@ -779,7 +783,7 @@ WHERE s.bvid IN (SELECT bvid FROM top_videos)
   AND s.rank_source = 'popular';
 ```
 
-> `rank_change` 正数 = 排名上升（数值变小），负数 = 排名下降。第一个点 `view_growth = 0`, `rank_change = 0`。TOP 视频按最新快照的 `view_count` 降序选取，默认使用 `rank_source='popular'` 以保证排名可比较。`/api/lifecycle` 和 `/api/lifecycle/top` 只覆盖 popular 样本；若 bvid 不在 popular 生命周期中，返回 `data=null`。
+> `rank_change` 正数 = 排名上升（数值变小），负数 = 排名下降。第一个点 `view_growth = 0`，`rank_change = 0`。Day 1 仅有 1 个快照点，需 ≥2 天数据才有折线。TOP 视频按最新快照的 `view_count` 降序选取，默认使用 `rank_source='popular'` 以保证排名可比较。`/api/lifecycle` 和 `/api/lifecycle/top` 只覆盖 popular 样本；若 bvid 不在 popular 生命周期中，返回 `data=null`。
 
 **5.3 UP 主汇总 (dws_up_summary_stats)**
 
@@ -963,7 +967,8 @@ WHERE tag IS NOT NULL AND TRIM(tag) != ''
 GROUP BY TRIM(tag), v.category;
 ```
 
-> 如果课程要求使用 MapReduce 做词频统计，可将 `dwd_video_info` 的 `title` 导出为 HDFS 文本，用 MapReduce + jieba 分词得到词频，再与 `ads_tag_cloud` 结合。
+> 热门视频 tags 天然为空（B站数据现象，详见 §3.1 已知限制），**必须**使用 MapReduce + jieba 标题分词填补词云数据。
+> 可将 `dwd_video_info` 的 `title` 导出为 HDFS 文本，用 MapReduce + jieba 分词得到词频，再与 `ads_tag_cloud` 结合。
 
 **5.8 视频生命周期 ADS (ads_video_lifecycle)**
 
