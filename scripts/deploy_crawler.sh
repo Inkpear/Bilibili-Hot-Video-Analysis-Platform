@@ -126,16 +126,17 @@ ssh "$WSL_HOST" "cd ${WSL_CRAWLER_DIR} && python3 -c 'import requests, tqdm' || 
 echo "  依赖安装完成"
 
 # ------------------------------------------------------------------
-# Step 5: 安装 user-level systemd 服务
+# Step 5: 安装 user-level systemd 常驻服务
 # ------------------------------------------------------------------
-echo "[5/5] 安装 systemd 定时任务..."
+echo "[5/5] 安装 systemd 常驻服务..."
 ssh "$WSL_HOST" << 'ENDSSH'
     mkdir -p "$HOME/.config/systemd/user"
     cp "$HOME/crawler/crawler.service" "$HOME/.config/systemd/user/"
-    cp "$HOME/crawler/crawler.timer" "$HOME/.config/systemd/user/"
+    systemctl --user disable --now crawler.timer >/dev/null 2>&1 || true
+    rm -f "$HOME/.config/systemd/user/crawler.timer"
     systemctl --user daemon-reload
-    systemctl --user enable crawler.timer
-    systemctl --user restart crawler.timer
+    systemctl --user enable crawler.service
+    systemctl --user restart crawler.service
 ENDSSH
 
 echo ""
@@ -144,10 +145,11 @@ echo "  部署完成!"
 echo "================================================"
 echo ""
 echo "  管理命令:"
-echo "    systemctl --user status crawler.timer    # 查看定时器状态"
-echo "    systemctl --user start crawler.service   # 手动触发一次采集"
+echo "    systemctl --user status crawler.service  # 查看守护进程状态"
+echo "    systemctl --user stop crawler.service    # 停止采集循环"
+echo "    systemctl --user disable crawler.service # 禁用开机自启"
 echo "    journalctl --user -u crawler.service -f  # 查看实时日志"
 echo "    journalctl --user -u crawler.service --since today --no-pager"
 echo ""
-echo "  下次触发时间:"
-ssh "$WSL_HOST" "systemctl --user list-timers crawler.timer --no-pager 2>/dev/null || echo '  (查看失败)'"
+echo "  当前服务状态:"
+ssh "$WSL_HOST" "systemctl --user status crawler.service --no-pager 2>/dev/null || echo '  (查看失败)'"

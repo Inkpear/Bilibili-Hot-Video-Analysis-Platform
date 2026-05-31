@@ -71,7 +71,7 @@ UP 主作为视频内嵌环节独立提交（成功即写入，不参与视频�
 | 评论 | 首次 + 缺失重试 | `comment_id` | 每 bvid 最多 200 条，采集完标记 has_comments=1 |
 | 弹幕 | 首次 + 缺失重试 | `danmaku_id` | 每 bvid 最多 3000 条，采集完标记 has_danmaku=1 |
 
-进度展示：前台运行时 tqdm 动态进度条 + `pbar.write()` 逐视频状态行；后台 screen 托管。
+进度展示：TTY 前台运行时使用 tqdm；systemd 非 TTY 运行时输出逐视频 `INFO` 文本日志。采集部署为 user-level systemd 常驻服务，启动即采集，采集完成后休眠 6 小时再进入下一轮。
 
 ### 3.2 数据规模
 

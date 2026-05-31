@@ -169,7 +169,7 @@ virsh net-dhcp-leases hadoop-net
 - 资源不存在统一返回 `code=0, data=null`，不使用 404
 - Cookie 不硬编码，使用环境变量 `BILI_COOKIE`
 - Cookie 含分号时不能用 `export $(grep ... | xargs)` 提取（bash 会将 `;` 解析为命令分隔符），必须用 `grep -o | sed` 提取原始值
-- 采集部署在 WSL，通过 user-level systemd timer 自动触发；日志用 `journalctl --user -u crawler.service -f` 查看
-- systemd `Type=oneshot`：服务运行中 timer 触发会静默跳过，不启动第二个实例
+- 采集部署在 WSL，通过 user-level systemd 常驻 `crawler.service` 自动循环触发；日志用 `journalctl --user -u crawler.service -f` 查看
+- `crawler.service` 启动即采集，采集完成后自动运行 `run_pipeline.sh`，再休眠 6 小时进入下一轮；需要停止时手动 `systemctl --user stop crawler.service`
 - 热门视频 tags 全空（B站数据现象），标签词云由 `scripts/run_tag_cloud_mr.sh` 基于 `ads_hot_video_rank.title` 做 MapReduce 标题分词生成
 - 生命周期折线图 Day 1 仅有 1 个快照点（`view_growth=0`），至少需要 2 轮采集

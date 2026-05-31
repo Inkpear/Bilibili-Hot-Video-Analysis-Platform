@@ -814,3 +814,31 @@ python3 -c "import jieba; print(jieba.__version__)"  # 0.42.1
 ### 结果
 - Hadoop Streaming Python3 + jieba smoke test 成功。
 - 示例标题 `原神新角色实机演示伤害爆炸` 输出正常词项：`原神`、`角色`、`实机`、`演示`、`伤害`、`爆炸`，不再退化为 n-gram 噪声词。
+
+---
+
+## 2026-05-31 18:45 - crawler 常驻循环服务切换
+
+### 目标
+取消每日 timer 触发方式，改为进程启动后立即采集，采集和 ETL 完成后休眠 6 小时再自动进入下一轮。采集到足够数据后由人工停止或禁用守护进程。
+
+### 关键操作
+- 停止当前受 SQLite WAL 删除影响的异常 `crawler.service`。
+- 清理 `/home/inkpear/crawler/crawler_state.db*` 与半成品 `/home/inkpear/output/20260531_1737`。
+- 新增 `scripts/crawler_loop.sh`：循环执行 `python3 main.py --once` → `scripts/run_pipeline.sh` → `sleep 21600`。
+- `crawler/crawler.service` 改为 `Type=simple`，`ExecStart=/bin/bash %h/scripts/crawler_loop.sh`，`Restart=always`。
+- `scripts/deploy_crawler.sh` 改为禁用并移除 `crawler.timer`，启用并启动常驻 `crawler.service`。
+
+### 验证
+```bash
+ssh UbuntuDesktop "systemctl --user is-enabled crawler.service"
+ssh UbuntuDesktop "systemctl --user is-active crawler.service"
+ssh UbuntuDesktop "systemctl --user is-enabled crawler.timer 2>/dev/null || true"
+ssh UbuntuDesktop "journalctl --user -u crawler.service -f"
+```
+
+### 结果
+- `crawler.service` enabled + active。
+- `crawler.timer` 已移除，状态为 `not-found/inactive`。
+- 新快照 `20260531_1842` 已开始采集。
+- SQLite `crawler_state.db-wal` 和 `crawler_state.db-shm` 为正常可见文件，不再是 deleted fd。
