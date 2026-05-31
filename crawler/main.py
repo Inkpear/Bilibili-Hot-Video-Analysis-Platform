@@ -1,63 +1,148 @@
 #!/usr/bin/env python3
 """
-crawler 入口 — 每 6 小时由 systemd timer 触发。
+crawler 入口 — 每天 0 点由 systemd timer 触发。
 
-流程:
-  1. 生成 snapshot_id
-  2. 采集榜单 (popular + ranking) → rank_video.ndjson
-  3. 发现新视频 → 补 /view 详情 → 入队评论/弹幕
-  4. 发现新 UP 主 → 补 WBI 信息 → up_info.ndjson
-  5. 消费评论队列 (上限 MAX_COMMENTS_PER_RUN)
-  6. 消费弹幕队列 (上限 MAX_DANMAKU_PER_RUN)
-  7. 写快照日志 + 统计输出
-
-用法:
-  python main.py                        # 正常采集
-  python main.py --once                 # 同默认
-  python main.py --dry-run              # 只采集榜单，不处理队列
-  python main.py --queue-only           # 只处理队列，不采集榜单
+按视频事务模型：
+  对每个新发现或有缺失的 bvid，按序采集 /view → UP → 评论 → 弹幕，
+  全部成功则标完成，任何一项失败则 fail_count++（≥3 永久放弃）。
 """
 
 import argparse
+import json
 import logging
 import os
 import sys
 import time
 
-from config import (
-    OUTPUT_DIR, RUN_TIMEOUT_SECONDS,
-    MAX_COMMENTS_PER_RUN, MAX_DANMAKU_PER_RUN,
-)
+from tqdm import tqdm
+
+from config import OUTPUT_DIR, COOKIE
 from db import CrawlerDB
-from utils import setup_logging, format_snapshot_id, logger as _root_logger
+from utils import setup_logging, format_snapshot_id
 from rank_spider import (
-    collect_all_ranks, write_rank_ndjson, discover_new_items,
+    collect_all_ranks, write_rank_ndjson_line, discover_new_items,
 )
-from video_detail import supplement_video_details
-from up_info import collect_up_info
-from comment import process_comment_queue
-from danmaku import process_danmaku_queue
+from video_detail import fetch_video_detail, write_detail_ndjson_line
+from up_info import fetch_up_info, write_up_ndjson_line
+from comment import collect_comments
+from danmaku import collect_danmaku
 
 logger = logging.getLogger("crawler")
 
 
-def _check_timeout(t_start, step_name=""):
-    """检查是否超过全局超时。返回 True 表示已超时。"""
-    elapsed = time.time() - t_start
-    if elapsed >= RUN_TIMEOUT_SECONDS:
-        prefix = f"[{step_name}] " if step_name else ""
-        logger.warning(
-            f"  {prefix}全局超时 {elapsed:.0f}s/{RUN_TIMEOUT_SECONDS}s，"
-            f"剩余任务留待下一轮"
-        )
-        return True
-    return False
+def process_video(bvid, row, db, snapshot_dir, detail_fp, up_fp):
+    """
+    处理单个视频事务。返回 (ok, status_parts, stats_delta)。
+
+    采集顺序: /view → UP → 评论 → 弹幕。
+    缺失项逐个补采，全部成功则标完成。
+    UP 独立提交（即便视频其他项失败也写入）。
+    """
+    info = db.get_video_info(bvid)
+    if info is None:
+        return False, ["无数据"], {}
+
+    ok = True
+    status_parts = []
+    delta = {"detail": 0, "up": 0, "comments": 0, "danmaku": 0}
+
+    # ---- detail ----
+    if info["has_detail"]:
+        status_parts.append("详情⏭")
+    else:
+        detail = fetch_video_detail(bvid)
+        if detail:
+            row["description"] = detail["description"]
+            row["tags"] = detail["tags"]
+            if detail.get("aid") and not row.get("aid"):
+                row["aid"] = detail["aid"]
+            if detail.get("cid") and not row.get("cid"):
+                row["cid"] = detail["cid"]
+            if detail.get("aid") and not info["aid"]:
+                db._conn.execute("UPDATE collected_videos SET aid=? WHERE bvid=?", (detail["aid"], bvid))
+            if detail.get("cid") and not info["cid"]:
+                db._conn.execute("UPDATE collected_videos SET cid=? WHERE bvid=?", (detail["cid"], bvid))
+            if detail.get("danmaku_count", 0):
+                db._conn.execute("UPDATE collected_videos SET danmaku_count=? WHERE bvid=?",
+                                 (detail["danmaku_count"], bvid))
+            db._conn.commit()
+            db.mark_detail_done(bvid)
+            write_detail_ndjson_line(detail_fp, detail)
+            delta["detail"] = 1
+            status_parts.append("详情✓")
+        else:
+            ok = False
+            status_parts.append("详情✗")
+
+    # ---- UP 主 (独立提交) ----
+    up_id = row.get("up_id", "")
+    if up_id and not db.is_up_collected(up_id) and not db.should_skip_up(up_id):
+        up_info = fetch_up_info(up_id)
+        if up_info:
+            write_up_ndjson_line(up_fp, up_info)
+            db.add_up(up_id)
+            delta["up"] = 1
+            status_parts.append("UP✓")
+        else:
+            db.record_up_failure(up_id, "fetch_up_info returned None")
+            status_parts.append("UP✗")
+
+    # ---- 评论 ----
+    comment_aid = row.get("aid", 0)
+    if info["has_comments"]:
+        comments_ok = True
+        status_parts.append("评论⏭")
+    else:
+        comments_rows, comments_ok = collect_comments(bvid, comment_aid, db)
+        if comments_ok:
+            comments_dir = os.path.join(snapshot_dir, "comments")
+            os.makedirs(comments_dir, exist_ok=True)
+            if comments_rows:
+                with open(os.path.join(comments_dir, f"{bvid}.ndjson"), "w", encoding="utf-8") as f:
+                    for cr in comments_rows:
+                        f.write(json.dumps(cr, ensure_ascii=False) + "\n")
+            db.mark_comments_done(bvid)
+            delta["comments"] = 1
+            status_parts.append(f"评论✓({len(comments_rows or [])}条)")
+        else:
+            ok = False
+            status_parts.append("评论✗")
+
+    # ---- 弹幕 ----
+    danmaku_cid = row.get("cid", 0)
+    if info["has_danmaku"]:
+        danmaku_ok = True
+        status_parts.append("弹幕⏭")
+    else:
+        danmaku_rows, danmaku_ok = collect_danmaku(bvid, danmaku_cid, db)
+        if danmaku_ok:
+            danmaku_dir = os.path.join(snapshot_dir, "danmaku")
+            os.makedirs(danmaku_dir, exist_ok=True)
+            if danmaku_rows:
+                with open(os.path.join(danmaku_dir, f"{bvid}.ndjson"), "w", encoding="utf-8") as f:
+                    for dr in danmaku_rows:
+                        f.write(json.dumps(dr, ensure_ascii=False) + "\n")
+            db.mark_danmaku_done(bvid)
+            delta["danmaku"] = 1
+            status_parts.append(f"弹幕✓({len(danmaku_rows or [])}条)")
+        else:
+            ok = False
+            status_parts.append("弹幕✗")
+
+    # ---- 提交/回滚 ----
+    if ok:
+        db.reset_fail_count(bvid)
+        return True, status_parts, delta
+    else:
+        count = db.increment_fail_count(bvid)
+        return False, status_parts, delta
 
 
-def run_snapshot(db: CrawlerDB, dry_run=False, max_new=-1):
+def run_snapshot(db, dry_run=False, max_videos=0):
     """执行一轮完整快照采集。"""
     snapshot_id = format_snapshot_id()
     snapshot_dir = os.path.join(OUTPUT_DIR, snapshot_id)
+    os.makedirs(snapshot_dir, exist_ok=True)
     t_start = time.time()
 
     logger.info(f"{'='*60}")
@@ -65,16 +150,9 @@ def run_snapshot(db: CrawlerDB, dry_run=False, max_new=-1):
     logger.info(f"{'='*60}")
 
     db.start_snapshot(snapshot_id)
-    rank_count = 0
-    new_video_count = 0
-    comments_done = 0
-    danmaku_done = 0
 
-    # ================================================================
     # Step 1: 采集榜单
-    # ================================================================
     rows = collect_all_ranks(snapshot_id, db)
-    rank_count = len(rows)
     logger.info(f"榜单采集耗时 {time.time()-t_start:.1f}s")
 
     if not rows:
@@ -82,139 +160,110 @@ def run_snapshot(db: CrawlerDB, dry_run=False, max_new=-1):
         db.finish_snapshot(snapshot_id, rank_count=0, status="no_data")
         return
 
-    # ================================================================
-    # Step 2: 发现新视频 + UP 主
-    # ================================================================
-    new_bvids, new_up_ids = discover_new_items(rows, snapshot_id, db)
-    new_video_count = len(new_bvids)
+    # Step 2: 发现新项目 + 重试列表
+    new_bvids, retry_bvids, new_up_ids = discover_new_items(rows, snapshot_id, db)
+    all_bvids = retry_bvids + new_bvids
 
-    # ================================================================
-    # Step 3: 补充视频详情 (/view) — 先于 rank_video 写入
-    # ================================================================
-    if max_new == 0:
-        logger.info(f"  新视频 {len(new_bvids)} 个, UP {len(new_up_ids)} 个 (跳过详情补充)")
-        new_bvids = []
-        new_up_ids = []
-    elif max_new > 0:
-        if len(new_bvids) > max_new or len(new_up_ids) > max_new:
-            logger.info(f"  新视频 {len(new_bvids)} 个, UP {len(new_up_ids)} 个 → 限制前 {max_new}")
-        new_bvids = new_bvids[:max_new]
-        new_up_ids = new_up_ids[:max_new]
+    if max_videos > 0 and len(all_bvids) > max_videos:
+        all_bvids = all_bvids[:max_videos]
+        logger.info(f"  限制处理前 {max_videos} 个视频")
 
-    processed_new_bvids = set(new_bvids)
-    merge_map = {}
+    row_map = {r["bvid"]: r for r in rows}
 
-    if new_bvids:
-        merge_map.update(supplement_video_details(new_bvids, db, snapshot_dir))
-        logger.info(f"视频详情耗时 {time.time()-t_start:.1f}s")
+    # Step 3: 流式输出文件
+    detail_fp = open(os.path.join(snapshot_dir, "video_detail.ndjson"), "w", encoding="utf-8")
+    up_fp = open(os.path.join(snapshot_dir, "up_info.ndjson"), "w", encoding="utf-8")
 
-    if new_up_ids:
-        collect_up_info(new_up_ids, db, snapshot_dir)
-        logger.info(f"UP主信息耗时 {time.time()-t_start:.1f}s")
+    stats = {"✓": 0, "✗": 0, "描": 0, "评": 0, "弹": 0, "UP": 0}
+    videos_ok = 0
+    videos_failed = 0
 
-    # ================================================================
-    # Step 3b: 重试遗留详情 + 合并到 merge_map
-    # ================================================================
-    if not dry_run:
-        stale_bvids = db.get_videos_missing_detail(exclude_bvids=processed_new_bvids)
+    try:
+        if all_bvids:
+            pbar = tqdm(total=len(all_bvids), desc="视频", unit="个",
+                        ncols=100, postfix=stats)
+            with pbar:
+                for i, bvid in enumerate(all_bvids):
+                    row = row_map.get(bvid)
+                    if row is None:
+                        continue
+                    if dry_run:
+                        continue
+
+                    ok, status_parts, delta = process_video(
+                        bvid, row, db, snapshot_dir, detail_fp, up_fp
+                    )
+
+                    if ok:
+                        videos_ok += 1
+                        stats["✓"] += 1
+                    else:
+                        videos_failed += 1
+                        stats["✗"] += 1
+                    stats["描"] += delta["detail"]
+                    stats["评"] += delta["comments"]
+                    stats["弹"] += delta["danmaku"]
+                    stats["UP"] += delta["up"]
+
+                    pbar.write(f"→ {bvid}: {' '.join(status_parts)}")
+                    pbar.update(1)
+                    pbar.set_postfix(stats)
+    finally:
+        detail_fp.close()
+        up_fp.close()
+
+    # Step 4: 写入 rank_video.ndjson
+    rank_path = os.path.join(snapshot_dir, "rank_video.ndjson")
+    with open(rank_path, "w", encoding="utf-8") as f:
+        for row in rows:
+            write_rank_ndjson_line(f, row)
+    logger.info(f"  写入 {rank_path} ({len(rows)} 行)")
+
+    # Step 5: 重试遗留视频详情
+    if not dry_run and max_videos == 0:
+        stale_bvids = db.get_videos_missing_detail(exclude_bvids=set(all_bvids))
         if stale_bvids:
             max_stale = 50
             if len(stale_bvids) > max_stale:
                 stale_bvids = stale_bvids[:max_stale]
             logger.info(f"  重试 {len(stale_bvids)} 个遗留视频详情")
-            merge_map.update(supplement_video_details(stale_bvids, db, snapshot_dir))
+            with open(os.path.join(snapshot_dir, "video_detail.ndjson"), "a", encoding="utf-8") as f:
+                for bvid in stale_bvids:
+                    detail = fetch_video_detail(bvid)
+                    if detail:
+                        row = row_map.get(bvid)
+                        if row:
+                            row["description"] = detail["description"]
+                            row["tags"] = detail["tags"]
+                        db.mark_detail_done(bvid)
+                        db.reset_fail_count(bvid)
+                        write_detail_ndjson_line(f, detail)
 
-    # ================================================================
-    # Step 3c: 把 description/tags 合并到 rank 行中，然后写入
-    # ================================================================
-    if merge_map:
-        merged = 0
-        for row in rows:
-            patch = merge_map.get(row["bvid"])
-            if patch:
-                row["description"] = patch["description"]
-                row["tags"] = patch["tags"]
-                merged += 1
-        logger.info(f"  合并 {merged} 条 description/tags (merge_map 共 {len(merge_map)} 条)")
-
-    write_rank_ndjson(rows, snapshot_dir)
-
-    # ================================================================
-    # Step 5-6: 消费队列 (dry-run 模式跳过)
-    # ================================================================
-    if not dry_run:
-        if _check_timeout(t_start, "评论队列前"):
-            comments_done = 0
-        else:
-            comments_done = process_comment_queue(db, snapshot_dir,
-                                                  limit=MAX_COMMENTS_PER_RUN)
-            logger.info(f"评论队列耗时 {time.time()-t_start:.1f}s")
-
-        if _check_timeout(t_start, "弹幕队列前"):
-            danmaku_done = 0
-        else:
-            danmaku_done = process_danmaku_queue(db, snapshot_dir,
-                                                  limit=MAX_DANMAKU_PER_RUN)
-            logger.info(f"弹幕队列耗时 {time.time()-t_start:.1f}s")
-
-    # ================================================================
     # 完成
-    # ================================================================
     db.finish_snapshot(
         snapshot_id,
-        rank_count=rank_count,
-        new_video_count=new_video_count,
-        comments_processed=comments_done,
-        danmaku_processed=danmaku_done,
+        rank_count=len(rows),
+        new_video_count=len(new_bvids),
+        videos_processed=len(all_bvids),
+        videos_ok=videos_ok,
+        videos_failed=videos_failed,
         status="ok",
     )
 
     total_time = time.time() - t_start
-    stats = db.stats()
+    stats_final = db.stats()
 
     logger.info(f"{'='*60}")
     logger.info(f"快照 {snapshot_id} 完成 ({total_time:.1f}s)")
-    logger.info(f"  榜单: {rank_count} 条")
-    logger.info(f"  新视频: {new_video_count} 个")
-    logger.info(f"  新UP主: {len(new_up_ids)} 个")
-    logger.info(f"  评论本轮: {comments_done} 视频")
-    logger.info(f"  弹幕本轮: {danmaku_done} 视频")
-    logger.info(f"  累计视频: {stats['videos']}")
-    logger.info(f"  累计评论: {stats['comments']}")
-    logger.info(f"  累计弹幕: {stats['danmaku']}")
-    logger.info(f"  累计UP主: {stats['ups']}")
-    logger.info(f"  队列评论: {stats['comment_queue']}")
-    logger.info(f"  队列弹幕: {stats['danmaku_queue']}")
-    logger.info(f"  处理中 评论: {stats['comment_processing']} 弹幕: {stats['danmaku_processing']}")
-    logger.info(f"  失败 评论: {stats['comment_failed']} 弹幕: {stats['danmaku_failed']} UP: {stats['up_failed']}")
+    logger.info(f"  榜单: {len(rows)} 条")
+    logger.info(f"  处理: {len(all_bvids)} 视频 (新 {len(new_bvids)}, 重试 {len(retry_bvids)})")
+    logger.info(f"  完成: {videos_ok}, 失败: {videos_failed}")
+    logger.info(f"  描述: {stats['描']}, 评论: {stats['评']}, 弹幕: {stats['弹']}, UP: {stats['UP']}")
+    logger.info(f"  累计视频: {stats_final['videos']} (ok={stats_final['videos_ok']}, 失败={stats_final['videos_failed']}, pending={stats_final['videos_pending']})")
+    logger.info(f"  累计评论: {stats_final['comments']}, 弹幕: {stats_final['danmaku']}, UP: {stats_final['ups']}")
+    logger.info(f"  描述覆盖: {stats_final['has_detail']}/{stats_final['videos']}")
     logger.info(f"  输出目录: {snapshot_dir}")
     logger.info(f"{'='*60}")
-
-
-def run_queue_only(db: CrawlerDB):
-    """只处理评论/弹幕队列，不做榜单采集。"""
-    snapshot_id = format_snapshot_id()
-    snapshot_dir = os.path.join(OUTPUT_DIR, snapshot_id)
-    t_start = time.time()
-
-    logger.info(f"{'='*60}")
-    logger.info(f"队列处理 {snapshot_id} 开始")
-    logger.info(f"{'='*60}")
-
-    c_done = process_comment_queue(db, snapshot_dir, limit=MAX_COMMENTS_PER_RUN)
-
-    if _check_timeout(t_start, "弹幕队列前"):
-        d_done = 0
-    else:
-        d_done = process_danmaku_queue(db, snapshot_dir, limit=MAX_DANMAKU_PER_RUN)
-
-    stats = db.stats()
-    elapsed = time.time() - t_start
-    logger.info(f"队列处理完成 ({elapsed:.1f}s)")
-    logger.info(f"  评论本轮: {c_done} 视频")
-    logger.info(f"  弹幕本轮: {d_done} 视频")
-    logger.info(f"  队列剩余 评论: {stats['comment_queue']} 弹幕: {stats['danmaku_queue']}")
-    logger.info(f"  失败 评论: {stats['comment_failed']} 弹幕: {stats['danmaku_failed']}")
 
 
 def main():
@@ -222,11 +271,9 @@ def main():
     parser.add_argument("--once", action="store_true", default=True,
                         help="单轮采集 (默认)")
     parser.add_argument("--dry-run", action="store_true",
-                        help="只采集榜单，不处理队列")
-    parser.add_argument("--queue-only", action="store_true",
-                        help="只处理队列，不采集榜单")
-    parser.add_argument("--max-new", type=int, default=-1,
-                        help="限制新视频详情+UP主处理数量 (-1=全部, 0=跳过, N=限制N个)")
+                        help="只采集榜单，不处理视频")
+    parser.add_argument("--max-videos", type=int, default=0,
+                        help="限制处理视频数 (0=全部)")
     parser.add_argument("--log-level", default="INFO",
                         choices=["DEBUG", "INFO", "WARNING", "ERROR"])
     parser.add_argument("--log-file", default=None,
@@ -235,23 +282,13 @@ def main():
 
     setup_logging(level=getattr(logging, args.log_level), log_file=args.log_file)
 
-    # 检查 Cookie
-    from config import COOKIE
-    if not COOKIE:
-        logger.error("环境变量 BILI_COOKIE 未设置")
-        logger.error("  export BILI_COOKIE=\"SESSDATA=...; bili_jct=...; DedeUserID=...\"")
-        sys.exit(1)
-
     logger.info(f"输出目录: {OUTPUT_DIR}")
     logger.info(f"COOKIE 长度: {len(COOKIE)} 字符")
 
     db = CrawlerDB()
 
     try:
-        if args.queue_only:
-            run_queue_only(db)
-        else:
-            run_snapshot(db, dry_run=args.dry_run, max_new=args.max_new)
+        run_snapshot(db, dry_run=args.dry_run, max_videos=args.max_videos)
     except Exception as e:
         logger.exception(f"采集异常: {e}")
         sys.exit(1)

@@ -35,7 +35,7 @@ Bilibili-Hot-Video-Analysis-Platform/
 | 项 | 决定 |
 |---|---|
 | 数据来源 | 全站热门 + 9 分区排行 |
-| 采集窗口 | 7 天，每 6 小时 1 次，共 28 快照点 |
+| 采集窗口 | 7 天，每天 1 轮，共 7 轮 |
 | 评论上限 | 200 条/视频（去重后只采一次） |
 | 弹幕 | 段式 seg.so API，protobuf 自解析，3000 条/视频（去重后只采一次） |
 | 分区 | 动画、游戏、娱乐、生活、音乐、舞蹈、科技、知识、影视 |
@@ -131,9 +131,9 @@ virsh net-dhcp-leases hadoop-net
 ## Current State
 
 - [x] `docs/plan.md` 完成
-- [x] `api-demo/` 8 个 B站 API 全部验证通过、Demo 可运行
+- [x] `api-demo/` 6 个 B站 API 验证通过、Demo 可运行
 - [x] Hadoop/Hive/Spark 环境搭建（Hadoop 3.3.6 + Hive 3.1.3 + Spark 3.5.3 集群已启动）
-- [x] 采集脚本开发 — 番剧(rid=13)/每周必看已移除，9分区+全站热门采集完成
+- [x] 采集脚本开发 — 事务模型：日结模式，每视频按 /view→UP→评论→弹幕 全量采集，fail_count≥3 永久放弃
 - [ ] Hive DDL + Spark SQL ETL
 - [ ] MySQL 建表 + 数据导出
 - [ ] Rust 后端 8 个 API 实现

@@ -1,8 +1,8 @@
 [Unit]
-Description=B站热门视频采集定时器 (每6小时)
+Description=B站热门视频采集定时器 (每天一轮)
 
 [Timer]
-OnCalendar=*-*-* 00,06,12,18:00:00
+OnCalendar=daily
 RandomizedDelaySec=60
 Persistent=true
 

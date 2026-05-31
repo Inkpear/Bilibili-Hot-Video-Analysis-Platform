@@ -1,21 +1,16 @@
 """
-弹幕队列消费：调用 seg.so 段式 API (protobuf)，每视频上限 3000 条。
+弹幕采集：调用 seg.so 段式 API (protobuf)，每视频上限 3000 条。
+返回采集结果，由调用方负责文件写入。
 """
 
-import json
 import logging
-import os
-import sys
 import time
 
 import requests
-from tqdm import tqdm
 
 from config import (
     HEADERS, DELAY, TIMEOUT,
-    OUTPUT_DIR, MAX_DANMAKU,
-    MAX_DANMAKU_PER_RUN,
-    PER_DANMAKU_TIMEOUT,
+    MAX_DANMAKU,
     DANMAKU_429_COOLDOWN,
     MAX_CONSECUTIVE_DANMAKU_429,
 )
@@ -58,33 +53,29 @@ def _reset_429_counter():
         _consecutive_429 = 0
 
 
-def collect_danmaku_for_bvid(bvid: str, cid: int, db, snapshot_dir: str) -> tuple[int, bool]:
+def collect_danmaku(bvid: str, cid: int, db) -> tuple[list[dict] | None, bool]:
     """
     采集单个视频的弹幕 (段式 seg.so, 上限 MAX_DANMAKU 条)。
     逐段拉取直到无数据或达到上限。
-    写入 danmaku/{bvid}.ndjson。
-    返回 (count, success): count=采集条数, success=是否完整采集未遇错误。
+    返回 (rows, success):
+      - rows: 弹幕列表 (新增的，不含已采集的)
+      - success: 是否完整采集未遇错误
+    不写文件，由调用方负责。
     """
     if _check_global_cooldown():
-        return 0, False
+        return None, False
 
     rows = []
     segment = 1
     collected_ids = []
     success = True
-    t_start = time.time()
 
     existing_ids = db.get_collected_danmaku_ids_for_bvid(bvid)
     remaining = MAX_DANMAKU - len(existing_ids)
     if remaining <= 0:
-        return 0, True
+        return None, True
 
     while len(rows) < remaining:
-        if time.time() - t_start > PER_DANMAKU_TIMEOUT:
-            logger.warning(f"  弹幕 {bvid}: 单视频超时 {PER_DANMAKU_TIMEOUT}s")
-            success = False
-            break
-
         resp = None
         for retry in range(3):
             try:
@@ -171,69 +162,4 @@ def collect_danmaku_for_bvid(bvid: str, cid: int, db, snapshot_dir: str) -> tupl
     if collected_ids:
         db.add_danmaku_ids_batch(collected_ids)
 
-    if rows:
-        danmaku_dir = os.path.join(snapshot_dir, "danmaku")
-        os.makedirs(danmaku_dir, exist_ok=True)
-        filepath = os.path.join(danmaku_dir, f"{bvid}.ndjson")
-        with open(filepath, "w", encoding="utf-8") as f:
-            for row in rows:
-                f.write(json.dumps(row, ensure_ascii=False) + "\n")
-
-    return len(rows), success
-
-
-def process_danmaku_queue(db, snapshot_dir: str, limit: int = None) -> int:
-    """
-    消费弹幕队列。返回本次处理的视频数。
-    """
-    if limit is None:
-        limit = MAX_DANMAKU_PER_RUN
-
-    # 全局冷却中不消耗队列
-    if _check_global_cooldown():
-        logger.info("  弹幕全局冷却中，本轮跳过")
-        return 0
-
-    tasks = db.dequeue_danmaku(limit)
-    if not tasks:
-        return 0
-
-    total = 0
-    ok_count = 0
-    fail_count = 0
-    skip_count = 0
-
-    pbar = tqdm(tasks, desc="弹幕队列", unit="个",
-                disable=not sys.stderr.isatty(),
-                postfix={"成功": 0, "失败": 0, "跳过": 0})
-    with pbar:
-        for qid, bvid, cid in pbar:
-            try:
-                count, ok = collect_danmaku_for_bvid(bvid, cid, db, snapshot_dir)
-                info = db.get_video_info(bvid)
-                expected = info.get("danmaku_count", 0) if info else 0
-                if ok and expected > 50 and count == 0:
-                    logger.warning(f"  弹幕 {bvid}: 0 条但视频应有 {expected} 条弹幕 → 标记失败")
-                    ok = False
-                db.complete_danmaku(qid, ok)
-                if ok:
-                    db.mark_danmaku_done(bvid)
-                    if count == 0:
-                        skip_count += 1
-                    else:
-                        ok_count += 1
-                else:
-                    fail_count += 1
-                logger.info(f"  弹幕 {bvid}: {count} 条 (应有{expected}) {'✓' if ok else '✗ 有错误'}")
-                total += count
-            except Exception as e:
-                logger.error(f"  弹幕 {bvid} 失败: {e}")
-                db.complete_danmaku(qid, False)
-                fail_count += 1
-
-            if _check_global_cooldown():
-                logger.info(f"  弹幕队列: 全局冷却触发，本轮已处理 {total} 条，停止")
-                break
-            pbar.set_postfix({"成功": ok_count, "失败": fail_count, "跳过": skip_count})
-    logger.info(f"  弹幕本轮: {len(tasks)} 视频, {total} 条")
-    return len(tasks)
+    return rows, success

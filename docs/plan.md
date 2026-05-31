@@ -49,26 +49,32 @@ B站排行 API (Python requests)
 | 数据源 | 全站热门 + 9 个分区榜 |
 | 包含分区 | 动画(1)、游戏(4)、娱乐(5)、生活(160)、音乐(3)、舞蹈(129)、科技(188)、知识(36)、影视(181) |
 | 采集周期 | 7 天 |
-| 快照频率 | 每 6 小时 1 次，共 28 个时间点 |
+| 快照频率 | 每天 1 轮，共 7 轮 |
 | 评论限制 | 每视频 200 条（去重后只采一次） |
 | 弹幕限制 | 每视频 3000 条（去重后只采一次） |
 
-**采集策略**：
+**采集策略**（日结事务模式）：
+
+每轮对每个新发现或上次有缺失的 bvid，按序采集 /view → UP → 评论 → 弹幕。
+全部成功则标完成（has_detail/comments/danmaku 全部=1），任何一项失败则 fail_count++（≥3 永久放弃）。
+UP 主作为视频内嵌环节独立提交（成功即写入，不参与视频事务回滚）。
 
 | 数据类型 | 采集频率 | 去重键 | 说明 |
 |---|---|---|---|
-| 排行榜快照 | 每 6 小时 | `bvid + snapshot_id + rank_source` | 28 个快照点，每次全量采集 |
-| 视频详情 | 首次 + 变更 | `bvid` | 已采集过的 bvid 不重复请求 |
-| UP 主信息 | 首次 + 变更 | `up_id` | 按 up_id 去重 |
-| 评论 | 首次 | `comment_id` | 每个 bvid 最多采集 200 条，只采一次 |
-| 弹幕 | 首次 | `danmaku_id` | 每个 bvid 最多 3000 条，只采一次 |
+| 排行榜快照 | 每天 1 次 | `bvid + snapshot_id + rank_source` | 7 个时间点，每次全量采集 |
+| 视频详情 | 首次 + 缺失重试 | `bvid` | has_detail=0 时采集，失败下轮重试 |
+| UP 主信息 | 首次 + 失败冷却 | `up_id` | 嵌入 per-video 循环，失败 3 次后 24h 冷却 |
+| 评论 | 首次 + 缺失重试 | `comment_id` | 每 bvid 最多 200 条，采集完标记 has_comments=1 |
+| 弹幕 | 首次 + 缺失重试 | `danmaku_id` | 每 bvid 最多 3000 条，采集完标记 has_danmaku=1 |
+
+进度展示：前台运行时 tqdm 动态进度条 + `pbar.write()` 逐视频状态行；后台 screen 托管。
 
 ### 3.2 数据规模
 
 | 项目 | 估算 |
 |---|---|
 | 独立视频 | ~500 个（保守估计，7 天榜单轮换可能达 1000-2000） |
-| 视频快照 | ~14,000 行（500 × 28，实际可达 28,000-56,000） |
+| 视频快照 | ~3,500 行（500 × 7，实际按轮换频率可达 7,000-14,000） |
 | 评论 | ~100,000 行 |
 | 弹幕 | ~1,500,000 行 |
 | ODS 总大小 | ~500MB~2GB |
@@ -262,7 +268,7 @@ HDFS 目录结构：
 - 评论的 `oid` 参数是视频的 `aid`（不是 bvid）。
 - 弹幕的 `oid` 参数是视频的 `cid`，使用段式 API，每 6 分钟一段。
 - **分区 `category` 映射规则**：`ranking` 来源直接用 `CATEGORY_NAMES[rid]`（九大分区之一）；`popular` 来源使用 API 返回的 `item["tname"]` 向上归并到九大分区（如"MAD·AMV"→"动画"），无法归并时设为"其他"。采集时需维护一份 `tname → category` 映射表。
-- **快照批次 `snapshot_id`**：每 6 小时一轮采集开始时生成一个批次标识，格式 `yyyyMMdd_HHmm`（如 `20260601_0000`）。本轮所有 API 请求产生的记录共用同一个 `snapshot_id`。后续 ADS 中"最新快照"统一用 `MAX(snapshot_id)` 而非逐条 `collect_time`。
+- **快照批次 `snapshot_id`**：每天一轮采集开始时生成一个批次标识，格式 `yyyyMMdd_HHmm`（如 `20260601_0000`）。本轮所有 API 请求产生的记录共用同一个 `snapshot_id`。后续 ADS 中"最新快照"统一用 `MAX(snapshot_id)` 而非逐条 `collect_time`。
 
 **Cookie 配置**：
 
@@ -288,12 +294,14 @@ CATEGORY_NAMES = {v: k for k, v in CATEGORY_RIDS.items()}
 
 ```
 crawler/
-├── main.py              # 入口，调度各模块；读取环境变量 BILI_COOKIE
+├── main.py              # 入口，调度各模块；per-video 事务编排
 ├── rank_spider.py       # 全站热门 + 分区排行（popular + ranking/v2）
 ├── video_detail.py      # 视频详情补充字段（description、tags、aid、cid）
 ├── up_info.py           # UP 主粉丝数（WBI 签名）
 ├── comment.py           # 评论（oid=aid，sort=1，每 bvid 最多 200 条）
 ├── danmaku.py           # 弹幕（oid=cid，protobuf 解析，每 bvid 最多 3000 条）
+├── db.py                # SQLite 状态管理：去重/失败追踪/快照日志
+├── config.py            # 全局配置
 └── utils.py             # 请求头、限速(≥2s)、重试、WBI 签名、protobuf 解析
 ```
 

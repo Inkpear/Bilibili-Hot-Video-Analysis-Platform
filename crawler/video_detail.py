@@ -4,12 +4,7 @@
 
 import json
 import logging
-import os
-import sys
 
-from tqdm import tqdm
-
-from config import OUTPUT_DIR
 from utils import api_get_safe
 
 logger = logging.getLogger("crawler")
@@ -59,62 +54,6 @@ def fetch_video_detail(bvid: str) -> dict | None:
     }
 
 
-def supplement_video_details(bvids: list[str], db, snapshot_dir: str) -> dict[str, dict]:
-    """
-    为一批 bvid 补充视频详情。
-    - 更新 db 中的 aid/cid/danmaku_count（若 rank 数据中缺失）
-    - 标记 has_detail=1
-    - 将详情写入 video_detail.ndjson
-    - 返回 {bvid: detail_dict} 用于合并到 rank_video
-    """
-    if not bvids:
-        return {}
-
-    merge_map = {}
-    patches = []
-    ok_count = 0
-    fail_count = 0
-
-    pbar = tqdm(bvids, desc="视频详情", unit="个",
-                disable=not sys.stderr.isatty(),
-                postfix={"成功": 0, "失败": 0})
-    with pbar:
-        for bvid in pbar:
-            detail = fetch_video_detail(bvid)
-            if detail is None:
-                fail_count += 1
-                pbar.set_postfix({"成功": ok_count, "失败": fail_count})
-                continue
-
-            info = db.get_video_info(bvid)
-            if info:
-                updates = []
-                if not info["aid"] and detail["aid"]:
-                    updates.append(("aid", detail["aid"]))
-                if not info["cid"] and detail["cid"]:
-                    updates.append(("cid", detail["cid"]))
-                if detail.get("danmaku_count", 0):
-                    updates.append(("danmaku_count", detail["danmaku_count"]))
-                for col, val in updates:
-                    db._conn.execute(
-                        f"UPDATE collected_videos SET {col}=? WHERE bvid=?",
-                        (val, bvid)
-                    )
-                if updates:
-                    db._conn.commit()
-
-            db.mark_detail_done(bvid)
-            merge_map[bvid] = {"description": detail["description"], "tags": detail["tags"]}
-            patches.append(detail)
-            ok_count += 1
-            pbar.set_postfix({"成功": ok_count, "失败": fail_count})
-
-    if patches:
-        os.makedirs(snapshot_dir, exist_ok=True)
-        filepath = os.path.join(snapshot_dir, "video_detail.ndjson")
-        with open(filepath, "w", encoding="utf-8") as f:
-            for p in patches:
-                f.write(json.dumps(p, ensure_ascii=False) + "\n")
-        logger.info(f"  视频详情: {len(patches)} 条 → {filepath}")
-
-    return merge_map
+def write_detail_ndjson_line(fp, detail: dict):
+    """向已打开的文件追加写入一行视频详情。"""
+    fp.write(json.dumps(detail, ensure_ascii=False) + "\n")

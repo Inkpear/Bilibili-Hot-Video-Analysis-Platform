@@ -1,12 +1,12 @@
 """
-SQLite 状态管理：已采集去重 + 评论/弹幕队列 + 快照日志。
+SQLite 状态管理：已采集去重 + 失败追踪 + 快照日志。
 """
 
 import logging
 import sqlite3
 import time
 
-from config import DB_PATH
+from config import DB_PATH, MAX_FAIL_COUNT
 
 logger = logging.getLogger("crawler")
 
@@ -23,6 +23,8 @@ CREATE TABLE IF NOT EXISTS collected_videos (
     has_detail    INTEGER DEFAULT 0,
     has_comments  INTEGER DEFAULT 0,
     has_danmaku   INTEGER DEFAULT 0,
+    fail_count    INTEGER DEFAULT 0,
+    last_fail_time INTEGER,
     first_seen_snapshot TEXT,
     collect_time  INTEGER
 );
@@ -51,46 +53,21 @@ CREATE TABLE IF NOT EXISTS failed_ups (
     updated_at    INTEGER
 );
 
-CREATE TABLE IF NOT EXISTS queue_comments (
-    id            INTEGER PRIMARY KEY AUTOINCREMENT,
-    bvid          TEXT NOT NULL,
-    aid           INTEGER NOT NULL,
-    priority      INTEGER DEFAULT 0,
-    retry_count   INTEGER DEFAULT 0,
-    status        TEXT DEFAULT 'pending',
-    created_at    INTEGER,
-    updated_at    INTEGER
-);
-
-CREATE TABLE IF NOT EXISTS queue_danmaku (
-    id            INTEGER PRIMARY KEY AUTOINCREMENT,
-    bvid          TEXT NOT NULL,
-    cid           INTEGER NOT NULL,
-    priority      INTEGER DEFAULT 0,
-    retry_count   INTEGER DEFAULT 0,
-    status        TEXT DEFAULT 'pending',
-    created_at    INTEGER,
-    updated_at    INTEGER
-);
-
 CREATE TABLE IF NOT EXISTS snapshot_log (
     snapshot_id       TEXT PRIMARY KEY,
     start_time        INTEGER,
     end_time          INTEGER,
     rank_count        INTEGER DEFAULT 0,
     new_video_count   INTEGER DEFAULT 0,
-    comments_processed INTEGER DEFAULT 0,
-    danmaku_processed  INTEGER DEFAULT 0,
+    videos_processed  INTEGER DEFAULT 0,
+    videos_ok         INTEGER DEFAULT 0,
+    videos_failed     INTEGER DEFAULT 0,
     status            TEXT DEFAULT 'pending'
 );
 
-CREATE INDEX IF NOT EXISTS idx_queue_comments_status ON queue_comments(status);
-CREATE INDEX IF NOT EXISTS idx_queue_danmaku_status ON queue_danmaku(status);
-CREATE INDEX IF NOT EXISTS idx_collected_videos_has ON collected_videos(has_detail, has_comments, has_danmaku);
+CREATE INDEX IF NOT EXISTS idx_collected_videos_status ON collected_videos(has_detail, has_comments, has_danmaku, fail_count);
 CREATE INDEX IF NOT EXISTS idx_failed_ups_retry ON failed_ups(retry_count, updated_at);
 """
-
-MAX_RETRIES = 3
 
 
 def _migrate_add_column(conn, table, column_def):
@@ -113,33 +90,13 @@ class CrawlerDB:
         self._conn.executescript(CREATE_SQL)
         self._conn.commit()
 
-        # 迁移：旧表可能缺少 retry_count 列
-        _migrate_add_column(self._conn, "queue_comments", "retry_count INTEGER DEFAULT 0")
-        _migrate_add_column(self._conn, "queue_danmaku", "retry_count INTEGER DEFAULT 0")
+        # 迁移：旧表可能缺少列
+        _migrate_add_column(self._conn, "collected_videos", "fail_count INTEGER DEFAULT 0")
+        _migrate_add_column(self._conn, "collected_videos", "last_fail_time INTEGER")
         _migrate_add_column(self._conn, "collected_videos", "danmaku_count INTEGER DEFAULT 0")
-
-        # 重置启动前残留的 processing 项
-        self.reset_stale_processing()
 
     def close(self):
         self._conn.close()
-
-    # ------------------------------------------------------------------
-    # 启动恢复
-    # ------------------------------------------------------------------
-
-    def reset_stale_processing(self, timeout_seconds=1800):
-        """将超时的 processing 项重置为 pending。启动时自动调用。"""
-        cutoff = int(time.time()) - timeout_seconds
-        for table in ("queue_comments", "queue_danmaku"):
-            rows = self._conn.execute(
-                f"UPDATE {table} SET status='pending', updated_at=? "
-                f"WHERE status='processing' AND updated_at < ?",
-                (int(time.time()), cutoff)
-            ).rowcount
-            if rows:
-                logger.info(f"  恢复 {rows} 个残留的 {table} 任务 (status: processing → pending)")
-        self._conn.commit()
 
     # ------------------------------------------------------------------
     # 视频
@@ -183,25 +140,28 @@ class CrawlerDB:
         )
         self._conn.commit()
 
-    def get_videos_missing_detail(self, exclude_bvids=None):
-        exclude_bvids = set(exclude_bvids or [])
-        rows = self._conn.execute(
-            "SELECT bvid FROM collected_videos WHERE has_detail=0 ORDER BY collect_time ASC"
-        ).fetchall()
-        if exclude_bvids:
-            return [r[0] for r in rows if r[0] not in exclude_bvids]
-        return [r[0] for r in rows]
+    def reset_fail_count(self, bvid):
+        self._conn.execute(
+            "UPDATE collected_videos SET fail_count=0, last_fail_time=NULL WHERE bvid=?", (bvid,)
+        )
+        self._conn.commit()
 
-    def get_video_count(self):
+    def increment_fail_count(self, bvid):
+        ts = int(time.time())
+        self._conn.execute(
+            "UPDATE collected_videos SET fail_count = fail_count + 1, last_fail_time = ? WHERE bvid=?",
+            (ts, bvid)
+        )
+        self._conn.commit()
         row = self._conn.execute(
-            "SELECT COUNT(*) FROM collected_videos"
+            "SELECT fail_count FROM collected_videos WHERE bvid=?", (bvid,)
         ).fetchone()
-        return row[0]
+        return row[0] if row else 0
 
     def get_video_info(self, bvid):
         row = self._conn.execute(
             "SELECT bvid,title,category,aid,cid,duration,danmaku_count,"
-            "has_detail,has_comments,has_danmaku "
+            "has_detail,has_comments,has_danmaku,fail_count "
             "FROM collected_videos WHERE bvid=?",
             (bvid,)
         ).fetchone()
@@ -212,7 +172,36 @@ class CrawlerDB:
             "aid": row[3], "cid": row[4], "duration": row[5],
             "danmaku_count": row[6],
             "has_detail": row[7], "has_comments": row[8], "has_danmaku": row[9],
+            "fail_count": row[10],
         }
+
+    def video_done(self, bvid):
+        """返回 True 如果视频所有组件都已完成。"""
+        info = self.get_video_info(bvid)
+        if info is None:
+            return False
+        return bool(info["has_detail"] and info["has_comments"] and info["has_danmaku"])
+
+    def video_abandoned(self, bvid):
+        """返回 True 如果视频已永久放弃。"""
+        info = self.get_video_info(bvid)
+        if info is None:
+            return False
+        return info["fail_count"] >= MAX_FAIL_COUNT
+
+    def get_videos_missing_detail(self, exclude_bvids=None):
+        exclude_bvids = set(exclude_bvids or [])
+        rows = self._conn.execute(
+            "SELECT bvid FROM collected_videos WHERE has_detail=0 AND fail_count<? ORDER BY collect_time ASC",
+            (MAX_FAIL_COUNT,)
+        ).fetchall()
+        return [r[0] for r in rows if r[0] not in exclude_bvids]
+
+    def get_video_count(self):
+        row = self._conn.execute(
+            "SELECT COUNT(*) FROM collected_videos"
+        ).fetchone()
+        return row[0]
 
     # ------------------------------------------------------------------
     # UP 主
@@ -313,149 +302,6 @@ class CrawlerDB:
         self._conn.commit()
 
     # ------------------------------------------------------------------
-    # 评论队列
-    # ------------------------------------------------------------------
-
-    def enqueue_comment(self, bvid, aid, priority=0):
-        existing = self._conn.execute(
-            "SELECT 1 FROM queue_comments WHERE bvid=? AND status IN ('pending','processing')",
-            (bvid,)
-        ).fetchone()
-        if existing:
-            return
-        ts = int(time.time())
-        self._conn.execute(
-            "INSERT INTO queue_comments (bvid, aid, priority, created_at) VALUES (?,?,?,?)",
-            (bvid, aid, priority, ts)
-        )
-        self._conn.commit()
-
-    def dequeue_comments(self, limit=10):
-        rows = self._conn.execute(
-            "SELECT id, bvid, aid FROM queue_comments WHERE status='pending' "
-            "ORDER BY priority DESC, retry_count ASC, id ASC LIMIT ?",
-            (limit,)
-        ).fetchall()
-        if not rows:
-            return []
-        ids = [r[0] for r in rows]
-        ts = int(time.time())
-        self._conn.execute(
-            f"UPDATE queue_comments SET status='processing', updated_at=? "
-            f"WHERE id IN ({','.join('?'*len(ids))})",
-            [ts] + ids
-        )
-        self._conn.commit()
-        return [(r[0], r[1], r[2]) for r in rows]
-
-    def complete_comment(self, queue_id, success=True):
-        """标记任务完成。success=False 时自动重试（最多 MAX_RETRIES 次）。"""
-        ts = int(time.time())
-        if success:
-            self._conn.execute(
-                "UPDATE queue_comments SET status='done', updated_at=? WHERE id=?",
-                (ts, queue_id)
-            )
-        else:
-            row = self._conn.execute(
-                "SELECT retry_count FROM queue_comments WHERE id=?", (queue_id,)
-            ).fetchone()
-            count = (row[0] if row else 0) + 1
-            if count >= MAX_RETRIES:
-                self._conn.execute(
-                    "UPDATE queue_comments SET status='failed', retry_count=?, updated_at=? WHERE id=?",
-                    (count, ts, queue_id)
-                )
-                logger.warning(f"  评论任务 {queue_id} 重试 {count} 次后标记为 failed")
-            else:
-                self._conn.execute(
-                    "UPDATE queue_comments SET status='pending', retry_count=?, updated_at=? WHERE id=?",
-                    (count, ts, queue_id)
-                )
-                logger.info(f"  评论任务 {queue_id} 重试 {count}/{MAX_RETRIES}，放回队列")
-        self._conn.commit()
-
-    def comment_queue_size(self):
-        row = self._conn.execute(
-            "SELECT COUNT(*) FROM queue_comments WHERE status='pending'"
-        ).fetchone()
-        return row[0]
-
-    def queue_status_counts(self, table):
-        rows = self._conn.execute(
-            f"SELECT status, COUNT(*) FROM {table} GROUP BY status"
-        ).fetchall()
-        return {status: count for status, count in rows}
-
-    # ------------------------------------------------------------------
-    # 弹幕队列
-    # ------------------------------------------------------------------
-
-    def enqueue_danmaku(self, bvid, cid, priority=0):
-        existing = self._conn.execute(
-            "SELECT 1 FROM queue_danmaku WHERE bvid=? AND status IN ('pending','processing')",
-            (bvid,)
-        ).fetchone()
-        if existing:
-            return
-        ts = int(time.time())
-        self._conn.execute(
-            "INSERT INTO queue_danmaku (bvid, cid, priority, created_at) VALUES (?,?,?,?)",
-            (bvid, cid, priority, ts)
-        )
-        self._conn.commit()
-
-    def dequeue_danmaku(self, limit=15):
-        rows = self._conn.execute(
-            "SELECT id, bvid, cid FROM queue_danmaku WHERE status='pending' "
-            "ORDER BY priority DESC, retry_count ASC, id ASC LIMIT ?",
-            (limit,)
-        ).fetchall()
-        if not rows:
-            return []
-        ids = [r[0] for r in rows]
-        ts = int(time.time())
-        self._conn.execute(
-            f"UPDATE queue_danmaku SET status='processing', updated_at=? "
-            f"WHERE id IN ({','.join('?'*len(ids))})",
-            [ts] + ids
-        )
-        self._conn.commit()
-        return [(r[0], r[1], r[2]) for r in rows]
-
-    def complete_danmaku(self, queue_id, success=True):
-        ts = int(time.time())
-        if success:
-            self._conn.execute(
-                "UPDATE queue_danmaku SET status='done', updated_at=? WHERE id=?",
-                (ts, queue_id)
-            )
-        else:
-            row = self._conn.execute(
-                "SELECT retry_count FROM queue_danmaku WHERE id=?", (queue_id,)
-            ).fetchone()
-            count = (row[0] if row else 0) + 1
-            if count >= MAX_RETRIES:
-                self._conn.execute(
-                    "UPDATE queue_danmaku SET status='failed', retry_count=?, updated_at=? WHERE id=?",
-                    (count, ts, queue_id)
-                )
-                logger.warning(f"  弹幕任务 {queue_id} 重试 {count} 次后标记为 failed")
-            else:
-                self._conn.execute(
-                    "UPDATE queue_danmaku SET status='pending', retry_count=?, updated_at=? WHERE id=?",
-                    (count, ts, queue_id)
-                )
-                logger.info(f"  弹幕任务 {queue_id} 重试 {count}/{MAX_RETRIES}，放回队列")
-        self._conn.commit()
-
-    def danmaku_queue_size(self):
-        row = self._conn.execute(
-            "SELECT COUNT(*) FROM queue_danmaku WHERE status='pending'"
-        ).fetchone()
-        return row[0]
-
-    # ------------------------------------------------------------------
     # 快照日志
     # ------------------------------------------------------------------
 
@@ -468,13 +314,13 @@ class CrawlerDB:
         self._conn.commit()
 
     def finish_snapshot(self, snapshot_id, rank_count=0, new_video_count=0,
-                        comments_processed=0, danmaku_processed=0, status="ok"):
+                        videos_processed=0, videos_ok=0, videos_failed=0, status="ok"):
         ts = int(time.time())
         self._conn.execute(
             """UPDATE snapshot_log SET end_time=?, rank_count=?, new_video_count=?,
-               comments_processed=?, danmaku_processed=?, status=?
+               videos_processed=?, videos_ok=?, videos_failed=?, status=?
                WHERE snapshot_id=?""",
-            (ts, rank_count, new_video_count, comments_processed, danmaku_processed,
+            (ts, rank_count, new_video_count, videos_processed, videos_ok, videos_failed,
              status, snapshot_id)
         )
         self._conn.commit()
@@ -490,18 +336,33 @@ class CrawlerDB:
     # ------------------------------------------------------------------
 
     def stats(self):
-        comment_status = self.queue_status_counts("queue_comments")
-        danmaku_status = self.queue_status_counts("queue_danmaku")
+        videos = self.get_video_count()
+        ok = self._conn.execute(
+            "SELECT COUNT(*) FROM collected_videos WHERE has_detail=1 AND has_comments=1 AND has_danmaku=1"
+        ).fetchone()[0]
+        fail = self._conn.execute(
+            "SELECT COUNT(*) FROM collected_videos WHERE fail_count>=?", (MAX_FAIL_COUNT,)
+        ).fetchone()[0]
+        pending = videos - ok - fail
+        has_detail = self._conn.execute(
+            "SELECT COUNT(*) FROM collected_videos WHERE has_detail=1"
+        ).fetchone()[0]
+        has_comments = self._conn.execute(
+            "SELECT COUNT(*) FROM collected_videos WHERE has_comments=1"
+        ).fetchone()[0]
+        has_danmaku = self._conn.execute(
+            "SELECT COUNT(*) FROM collected_videos WHERE has_danmaku=1"
+        ).fetchone()[0]
         return {
-            "videos": self.get_video_count(),
+            "videos": videos,
+            "videos_ok": ok,
+            "videos_failed": fail,
+            "videos_pending": pending,
+            "has_detail": has_detail,
+            "has_comments": has_comments,
+            "has_danmaku": has_danmaku,
             "comments": self._conn.execute("SELECT COUNT(*) FROM collected_comments").fetchone()[0],
             "danmaku": self._conn.execute("SELECT COUNT(*) FROM collected_danmaku").fetchone()[0],
             "ups": self._conn.execute("SELECT COUNT(*) FROM collected_ups").fetchone()[0],
-            "comment_queue": self.comment_queue_size(),
-            "danmaku_queue": self.danmaku_queue_size(),
-            "comment_processing": comment_status.get("processing", 0),
-            "comment_failed": comment_status.get("failed", 0),
-            "danmaku_processing": danmaku_status.get("processing", 0),
-            "danmaku_failed": danmaku_status.get("failed", 0),
             "up_failed": self._conn.execute("SELECT COUNT(*) FROM failed_ups").fetchone()[0],
         }

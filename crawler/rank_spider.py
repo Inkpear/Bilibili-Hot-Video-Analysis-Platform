@@ -4,12 +4,11 @@
 
 import json
 import logging
-import os
 
 from config import (
-    CATEGORY_RIDS, CATEGORY_NAMES,
+    CATEGORY_RIDS,
     POPULAR_PS, POPULAR_PAGES,
-    map_tname,
+    map_tname, MAX_FAIL_COUNT,
 )
 from utils import api_get_safe, timestamp_now_ms
 
@@ -150,24 +149,25 @@ def collect_all_ranks(snapshot_id: str, db) -> list[dict]:
     return all_rows
 
 
-def write_rank_ndjson(rows: list[dict], snapshot_dir: str):
-    """写入 rank_video.ndjson。"""
-    os.makedirs(snapshot_dir, exist_ok=True)
-    filepath = os.path.join(snapshot_dir, "rank_video.ndjson")
-    with open(filepath, "w", encoding="utf-8") as f:
-        for row in rows:
-            f.write(json.dumps(row, ensure_ascii=False) + "\n")
-    logger.info(f"  写入 {filepath} ({len(rows)} 行)")
+def write_rank_ndjson_line(fp, row: dict):
+    """向已打开的文件追加写入一行 rank_video 数据。"""
+    fp.write(json.dumps(row, ensure_ascii=False) + "\n")
 
 
 def discover_new_items(rows: list[dict], snapshot_id: str, db):
     """
-    从榜单行中发现新 bvid 和 up_id：
-    - 新 bvid → 入 collected_videos + 入队评论/弹幕
-    - 新 up_id → 标记待采集
-    返回 (new_bvids, new_up_ids)
+    从榜单行中发现新 bvid、需重试 bvid 和新 up_id:
+
+    - 全新 bvid → 入 collected_videos → 返回 new_bvids
+    - 已有但未完成 (has_detail/comments/danmaku 有缺口 且 fail_count<3) → 返回 retry_bvids
+    - 永久放弃 (fail_count>=3) → 跳过
+    - 已完成 (三字段全 1) → 跳过
+    - 新 up_id → 返回 new_up_ids
+
+    返回 (new_bvids, retry_bvids, new_up_ids)
     """
     new_bvids = []
+    retry_bvids = []
     new_up_ids = []
 
     seen_bvid = set()
@@ -177,29 +177,33 @@ def discover_new_items(rows: list[dict], snapshot_id: str, db):
         bvid = row["bvid"]
         up_id = row["up_id"]
 
-        if bvid not in seen_bvid and not db.is_video_collected(bvid):
-            seen_bvid.add(bvid)
-            db.add_video(
-                bvid=bvid,
-                title=row["title"],
-                category=row["category"],
-                sub_category=row["sub_category"],
-                aid=row["aid"],
-                cid=row["cid"],
-                duration=row["duration"],
-                danmaku_count=row.get("danmaku_count", 0),
-                snapshot_id=snapshot_id,
-            )
-            # 入队评论 + 弹幕任务
-            if row["aid"]:
-                db.enqueue_comment(bvid, row["aid"])
-            if row["cid"]:
-                db.enqueue_danmaku(bvid, row["cid"])
-            new_bvids.append(bvid)
+        info = db.get_video_info(bvid)
+
+        if info is None:
+            if bvid not in seen_bvid:
+                seen_bvid.add(bvid)
+                db.add_video(
+                    bvid=bvid,
+                    title=row["title"],
+                    category=row["category"],
+                    sub_category=row["sub_category"],
+                    aid=row["aid"],
+                    cid=row["cid"],
+                    duration=row["duration"],
+                    danmaku_count=row.get("danmaku_count", 0),
+                    snapshot_id=snapshot_id,
+                )
+                new_bvids.append(bvid)
+        elif info["fail_count"] >= MAX_FAIL_COUNT:
+            continue
+        elif not (info["has_detail"] and info["has_comments"] and info["has_danmaku"]):
+            if bvid not in seen_bvid:
+                seen_bvid.add(bvid)
+                retry_bvids.append(bvid)
 
         if up_id and up_id not in seen_upid and not db.is_up_collected(up_id):
             seen_upid.add(up_id)
             new_up_ids.append(up_id)
 
-    logger.info(f"  新发现: {len(new_bvids)} 个 bvid, {len(new_up_ids)} 个 up_id")
-    return new_bvids, new_up_ids
+    logger.info(f"  发现: {len(new_bvids)} 新, {len(retry_bvids)} 重试, {len(new_up_ids)} UP")
+    return new_bvids, retry_bvids, new_up_ids

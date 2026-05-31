@@ -92,16 +92,12 @@ REPLY_PS = 20          # 评论每页条数
 MAX_COMMENTS = 200     # 每视频评论上限
 MAX_DANMAKU = 3000     # 每视频弹幕上限
 
-# ---- 队列消费上限 (每轮快照) ----
-MAX_COMMENTS_PER_RUN = 35   # 每轮最多处理 N 个视频的评论
-MAX_DANMAKU_PER_RUN = 35    # 每轮最多处理 N 个视频的弹幕
-
-# ---- 超时控制 ----
-RUN_TIMEOUT_SECONDS = 10800          # 单轮全局硬超时 (3h)
-PER_COMMENT_TIMEOUT = 300            # 单视频评论超时 (秒)
-PER_DANMAKU_TIMEOUT = 600            # 单视频弹幕超时 (秒)
+# ---- 弹幕全局冷却 ----
 DANMAKU_429_COOLDOWN = 120           # 连续429后全局冷却 (秒)
 MAX_CONSECUTIVE_DANMAKU_429 = 10     # 连续多少段429后触发冷却
+
+# ---- 永久放弃阈值 ----
+MAX_FAIL_COUNT = 3                   # 连续失败 N 次后永久放弃
 
 # ---- 输出路径 ----
 OUTPUT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "output")
