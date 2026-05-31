@@ -956,19 +956,16 @@ GROUP BY v.category;
 **5.7 标签词云 (ads_tag_cloud)**
 
 ```sql
-CREATE TABLE ads_tag_cloud AS
-SELECT
-    TRIM(tag) AS tag,
-    COUNT(*) AS tag_count,
-    v.category
-FROM dwd_video_info v
-LATERAL VIEW EXPLODE(SPLIT(v.tags, ',')) t AS tag
-WHERE tag IS NOT NULL AND TRIM(tag) != ''
-GROUP BY TRIM(tag), v.category;
+CREATE TABLE ads_tag_cloud (
+    tag        STRING,
+    tag_count  INT,
+    category   STRING
+)
+STORED AS PARQUET;
 ```
 
-> 热门视频 tags 天然为空（B站数据现象，详见 §3.1 已知限制），**必须**使用 MapReduce + jieba 标题分词填补词云数据。
-> 可将 `dwd_video_info` 的 `title` 导出为 HDFS 文本，用 MapReduce + jieba 分词得到词频，再与 `ads_tag_cloud` 结合。
+> 热门视频 tags 天然为空（B站数据现象，详见 §3.1 已知限制），`ads_tag_cloud` 由后续 `scripts/run_tag_cloud_mr.sh` 覆盖写入。
+> 输入来自最新 `ads_hot_video_rank` 的 `category\ttitle`，Hadoop Streaming 使用 Python3 + jieba 做标题分词，输出全站与分区词频。
 
 **5.8 视频生命周期 ADS (ads_video_lifecycle)**
 
@@ -1008,19 +1005,27 @@ SELECT * FROM dws_up_summary_stats;
 
 **MapReduce 任务：标题词频统计**
 
-```java
-// TitleWordCount.java
-// 输入：HDFS /data/bilibili/mr_input/titles.txt（每行一个 bvid\ttitle）
-// 输出：HDFS /data/bilibili/mr_output/（word\tcount）
-//
-// Mapper: 对 title 进行中文分词（jieba / SimpleTokenizer），输出 <word, 1>
-// Reducer: 汇总词频，输出 <word, count>
-//
-// 运行命令：
-//   hadoop jar titlewordcount.jar TitleWordCount /data/bilibili/mr_input /data/bilibili/mr_output
-//
-// 结果可导入 MySQL ads_tag_cloud 表作为补充词源。
+```text
+mapreduce/
+├── mapper.py       # Python3/jieba 标题分词，输出 category\tword\t1
+├── reducer.py      # 聚合 category + word 词频
+└── stopwords.txt   # 停用词
 ```
+
+运行脚本：
+
+```bash
+bash scripts/run_tag_cloud_mr.sh
+```
+
+HDFS 输入输出：
+
+```text
+/data/bilibili/mr_input/title_words   # category\ttitle
+/data/bilibili/mr_output/title_words  # category\ttag\ttag_count
+```
+
+结果写回 Hive `ads_tag_cloud`，其中 `category='全站'` 表示全局词云，其余为分区词云。
 
 **验证**：
 
@@ -1047,7 +1052,10 @@ bash scripts/upload_hdfs.sh
 # Step 2: Spark SQL ETL（在 master 上运行）
 ssh hadoop@master spark-sql --master spark://master:7077 -f /home/hadoop/sql/spark_etl.sql
 
-# Step 3: Spark JDBC 导出到 MySQL
+# Step 3: 标题词云 MapReduce（在 WSL 脚本中远程触发 master）
+bash scripts/run_tag_cloud_mr.sh
+
+# Step 4: Spark JDBC 导出到 MySQL
 ssh hadoop@master spark-submit --jars /opt/spark/jars/mysql-connector-j-8.0.33.jar \
     --master spark://master:7077 \
     /home/hadoop/scripts/export_to_mysql.py

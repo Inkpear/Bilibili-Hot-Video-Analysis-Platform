@@ -53,7 +53,7 @@ if [ -f "$SNAPSHOT_DIR/rank_video.ndjson" ]; then
     echo "[1/4] 上传 rank_video.ndjson ..."
     cat "$SNAPSHOT_DIR/rank_video.ndjson" | \
         sshpass -p "$MASTER_PASS" ssh -o StrictHostKeyChecking=no ${MASTER_USER}@${MASTER_HOST} \
-        "hdfs dfs -put - ${HDFS_BASE}/rank_video/${SNAPSHOT_ID}_rank_video.ndjson"
+        "hdfs dfs -put -f - ${HDFS_BASE}/rank_video/${SNAPSHOT_ID}_rank_video.ndjson"
 fi
 
 # 上传评论
@@ -63,7 +63,7 @@ if [ -d "$SNAPSHOT_DIR/comments" ] && [ "$(ls -A $SNAPSHOT_DIR/comments 2>/dev/n
         bvid=$(basename "$f" .ndjson)
         cat "$f" | \
             sshpass -p "$MASTER_PASS" ssh -o StrictHostKeyChecking=no ${MASTER_USER}@${MASTER_HOST} \
-            "hdfs dfs -put - ${HDFS_BASE}/video_comment/${SNAPSHOT_ID}_${bvid}.ndjson"
+            "hdfs dfs -put -f - ${HDFS_BASE}/video_comment/${SNAPSHOT_ID}_${bvid}.ndjson"
     done
 fi
 
@@ -74,7 +74,7 @@ if [ -d "$SNAPSHOT_DIR/danmaku" ] && [ "$(ls -A $SNAPSHOT_DIR/danmaku 2>/dev/nul
         bvid=$(basename "$f" .ndjson)
         cat "$f" | \
             sshpass -p "$MASTER_PASS" ssh -o StrictHostKeyChecking=no ${MASTER_USER}@${MASTER_HOST} \
-            "hdfs dfs -put - ${HDFS_BASE}/video_danmaku/${SNAPSHOT_ID}_${bvid}.ndjson"
+            "hdfs dfs -put -f - ${HDFS_BASE}/video_danmaku/${SNAPSHOT_ID}_${bvid}.ndjson"
     done
 fi
 
@@ -83,9 +83,10 @@ if [ -f "$SNAPSHOT_DIR/up_info.ndjson" ]; then
     echo "[4/4] 上传 up_info.ndjson ..."
     cat "$SNAPSHOT_DIR/up_info.ndjson" | \
         sshpass -p "$MASTER_PASS" ssh -o StrictHostKeyChecking=no ${MASTER_USER}@${MASTER_HOST} \
-        "hdfs dfs -put - ${HDFS_BASE}/up_info/${SNAPSHOT_ID}_up_info.ndjson"
+        "hdfs dfs -put -f - ${HDFS_BASE}/up_info/${SNAPSHOT_ID}_up_info.ndjson"
 fi
 
 echo ""
 echo "上传完成: $SNAPSHOT_ID"
-hdfs dfs -ls -R ${HDFS_BASE}/ 2>/dev/null | tail -10
+sshpass -p "$MASTER_PASS" ssh -o StrictHostKeyChecking=no ${MASTER_USER}@${MASTER_HOST} \
+    "hdfs dfs -ls -R ${HDFS_BASE}/ | tail -10"

@@ -5,10 +5,9 @@ Wants=network-online.target
 
 [Service]
 Type=oneshot
-User=inkpear
-WorkingDirectory=/home/inkpear/crawler
-EnvironmentFile=/home/inkpear/crawler/.env
-ExecStart=/usr/bin/python3 /home/inkpear/crawler/main.py --once
-ExecStartPost=/bin/bash /home/inkpear/scripts/run_pipeline.sh
-StandardOutput=append:/home/inkpear/crawler/logs/crawler.log
-StandardError=append:/home/inkpear/crawler/logs/crawler_error.log
+WorkingDirectory=%h/crawler
+EnvironmentFile=%h/crawler/.env
+ExecStart=/usr/bin/python3 %h/crawler/main.py --once
+ExecStartPost=/bin/bash %h/scripts/run_pipeline.sh
+StandardOutput=journal
+StandardError=journal

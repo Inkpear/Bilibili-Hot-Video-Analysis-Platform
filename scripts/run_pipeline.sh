@@ -4,7 +4,8 @@
 # 在爬虫采集完成后运行:
 #   1. 上传最新 NDJSON 到 HDFS
 #   2. 运行 Spark ETL (ODS → DWD → DWS → ADS)
-#   3. 导出 ADS 到 MySQL
+#   3. 运行标题词云 MapReduce
+#   4. 导出 ADS 到 MySQL
 #
 # 用法:
 #   bash run_pipeline.sh                    # 处理最新 snapshot
@@ -24,17 +25,22 @@ echo "================================================"
 
 # Step 1: 上传 NDJSON 到 HDFS
 echo ""
-echo "[1/3] 上传 NDJSON 到 HDFS..."
+echo "[1/4] 上传 NDJSON 到 HDFS..."
 bash "$SCRIPT_DIR/upload_hdfs.sh" "$@"
 
 # Step 2: 运行 Spark ETL
 echo ""
-echo "[2/3] 运行 Spark ETL..."
+echo "[2/4] 运行 Spark ETL..."
 $SSH_CMD "spark-sql --master spark://master:7077 -f /home/hadoop/sql/spark_etl.sql" 2>&1 | tail -20
 
-# Step 3: 导出到 MySQL
+# Step 3: 标题词云 MapReduce
 echo ""
-echo "[3/3] 导出 ADS 到 MySQL..."
+echo "[3/4] 运行标题词云 MapReduce..."
+bash "$SCRIPT_DIR/run_tag_cloud_mr.sh"
+
+# Step 4: 导出到 MySQL
+echo ""
+echo "[4/4] 导出 ADS 到 MySQL..."
 $SSH_CMD "spark-submit --jars /opt/spark/jars/mysql-connector-j-8.0.33.jar \
     --master spark://master:7077 \
     /home/hadoop/scripts/export_to_mysql.py" 2>&1 | tail -15

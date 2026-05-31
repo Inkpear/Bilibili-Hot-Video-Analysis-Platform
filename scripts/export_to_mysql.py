@@ -13,8 +13,9 @@ export_to_mysql.py — Spark ETL 结果导出到 MySQL
   - mysql-connector-j jar 在 /opt/spark/jars/ 下
 """
 
+import sys
+
 from pyspark.sql import SparkSession
-import os
 
 MYSQL_URL = "jdbc:mysql://master:3306/bilibili"
 MYSQL_USER = "hive"
@@ -36,13 +37,12 @@ spark = SparkSession.builder \
     .enableHiveSupport() \
     .getOrCreate()
 
+failed = False
+
 for tbl in TABLES:
     try:
         df = spark.sql(f"SELECT * FROM bilibili.{tbl}")
         count = df.count()
-        if count == 0:
-            print(f"  {tbl}: 0 rows, skipping")
-            continue
 
         df.write \
             .format("jdbc") \
@@ -59,6 +59,10 @@ for tbl in TABLES:
 
     except Exception as e:
         print(f"  {tbl}: FAILED - {e}")
+        failed = True
 
 spark.stop()
+if failed:
+    print("Export failed.")
+    sys.exit(1)
 print("Export complete.")

@@ -30,6 +30,14 @@ from danmaku import collect_danmaku
 logger = logging.getLogger("crawler")
 
 
+def _use_tqdm() -> bool:
+    return sys.stderr.isatty()
+
+
+def _flush(fp):
+    fp.flush()
+
+
 def process_video(bvid, row, db, snapshot_dir, detail_fp, up_fp):
     """
     处理单个视频事务。返回 (ok, status_parts, stats_delta)。
@@ -66,8 +74,9 @@ def process_video(bvid, row, db, snapshot_dir, detail_fp, up_fp):
                 db._conn.execute("UPDATE collected_videos SET danmaku_count=? WHERE bvid=?",
                                  (detail["danmaku_count"], bvid))
             db._conn.commit()
-            db.mark_detail_done(bvid)
             write_detail_ndjson_line(detail_fp, detail)
+            _flush(detail_fp)
+            db.mark_detail_done(bvid)
             delta["detail"] = 1
             status_parts.append("详情✓")
         else:
@@ -80,6 +89,7 @@ def process_video(bvid, row, db, snapshot_dir, detail_fp, up_fp):
         up_info = fetch_up_info(up_id)
         if up_info:
             write_up_ndjson_line(up_fp, up_info)
+            _flush(up_fp)
             db.add_up(up_id)
             delta["up"] = 1
             status_parts.append("UP✓")
@@ -101,6 +111,8 @@ def process_video(bvid, row, db, snapshot_dir, detail_fp, up_fp):
                 with open(os.path.join(comments_dir, f"{bvid}.ndjson"), "w", encoding="utf-8") as f:
                     for cr in comments_rows:
                         f.write(json.dumps(cr, ensure_ascii=False) + "\n")
+                    f.flush()
+                db.add_comment_ids_batch([(cr["comment_id"], bvid) for cr in comments_rows])
             db.mark_comments_done(bvid)
             delta["comments"] = 1
             status_parts.append(f"评论✓({len(comments_rows or [])}条)")
@@ -122,6 +134,8 @@ def process_video(bvid, row, db, snapshot_dir, detail_fp, up_fp):
                 with open(os.path.join(danmaku_dir, f"{bvid}.ndjson"), "w", encoding="utf-8") as f:
                     for dr in danmaku_rows:
                         f.write(json.dumps(dr, ensure_ascii=False) + "\n")
+                    f.flush()
+                db.add_danmaku_ids_batch([(dr["danmaku_id"], bvid) for dr in danmaku_rows])
             db.mark_danmaku_done(bvid)
             delta["danmaku"] = 1
             status_parts.append(f"弹幕✓({len(danmaku_rows or [])}条)")
@@ -168,7 +182,12 @@ def run_snapshot(db, dry_run=False, max_videos=0):
         all_bvids = all_bvids[:max_videos]
         logger.info(f"  限制处理前 {max_videos} 个视频")
 
-    row_map = {r["bvid"]: r for r in rows}
+    row_map = {}
+    rows_by_bvid = {}
+    for row in rows:
+        rows_by_bvid.setdefault(row["bvid"], []).append(row)
+        if row["bvid"] not in row_map or row.get("rank_source") == "popular":
+            row_map[row["bvid"]] = row
 
     # Step 3: 流式输出文件
     detail_fp = open(os.path.join(snapshot_dir, "video_detail.ndjson"), "w", encoding="utf-8")
@@ -180,10 +199,11 @@ def run_snapshot(db, dry_run=False, max_videos=0):
 
     try:
         if all_bvids:
+            use_tqdm = _use_tqdm()
             pbar = tqdm(total=len(all_bvids), desc="视频", unit="个",
-                        ncols=100, postfix=stats)
+                        ncols=100, postfix=stats, disable=not use_tqdm)
             with pbar:
-                for i, bvid in enumerate(all_bvids):
+                for i, bvid in enumerate(all_bvids, start=1):
                     row = row_map.get(bvid)
                     if row is None:
                         continue
@@ -193,6 +213,13 @@ def run_snapshot(db, dry_run=False, max_videos=0):
                     ok, status_parts, delta = process_video(
                         bvid, row, db, snapshot_dir, detail_fp, up_fp
                     )
+
+                    if delta["detail"]:
+                        for duplicate_row in rows_by_bvid.get(bvid, []):
+                            duplicate_row["description"] = row.get("description", "")
+                            duplicate_row["tags"] = row.get("tags", "")
+                            duplicate_row["aid"] = row.get("aid", duplicate_row.get("aid", 0))
+                            duplicate_row["cid"] = row.get("cid", duplicate_row.get("cid", 0))
 
                     if ok:
                         videos_ok += 1
@@ -205,7 +232,15 @@ def run_snapshot(db, dry_run=False, max_videos=0):
                     stats["弹"] += delta["danmaku"]
                     stats["UP"] += delta["up"]
 
-                    pbar.write(f"→ {bvid}: {' '.join(status_parts)}")
+                    message = (
+                        f"视频进度 {i}/{len(all_bvids)} {bvid}: {' '.join(status_parts)} "
+                        f"| ok={stats['✓']} fail={stats['✗']} detail={stats['描']} "
+                        f"comments={stats['评']} danmaku={stats['弹']} up={stats['UP']}"
+                    )
+                    if use_tqdm:
+                        pbar.write(message)
+                    else:
+                        logger.info(message)
                     pbar.update(1)
                     pbar.set_postfix(stats)
     finally:

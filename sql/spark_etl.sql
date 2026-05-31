@@ -453,15 +453,12 @@ GROUP BY v.category;
 
 -- 5.7 标签词云
 DROP TABLE IF EXISTS ads_tag_cloud;
-CREATE TABLE ads_tag_cloud AS
-SELECT
-    TRIM(tag) AS tag,
-    COUNT(*) AS tag_count,
-    v.category
-FROM dwd_video_info v
-LATERAL VIEW EXPLODE(SPLIT(v.tags, ',')) t AS tag
-WHERE tag IS NOT NULL AND TRIM(tag) != ''
-GROUP BY TRIM(tag), v.category;
+CREATE TABLE ads_tag_cloud (
+    tag        STRING,
+    tag_count  INT,
+    category   STRING
+)
+STORED AS PARQUET;
 
 -- 5.8 视频生命周期 ADS
 DROP TABLE IF EXISTS ads_video_lifecycle;

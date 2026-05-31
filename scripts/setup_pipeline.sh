@@ -16,6 +16,20 @@ echo "================================================"
 echo "  数据管线首次初始化"
 echo "================================================"
 
+# 0. 部署 SQL 和导出脚本
+echo ""
+echo "[0/4] 部署 SQL、MapReduce 和导出脚本..."
+$SSH_CMD "mkdir -p /home/hadoop/sql /home/hadoop/scripts /home/hadoop/mapreduce"
+cat "$SCRIPT_DIR/../sql/hive_ods_ddl.sql" | $SSH_CMD "cat > /home/hadoop/sql/hive_ods_ddl.sql"
+cat "$SCRIPT_DIR/../sql/mysql_ads_ddl.sql" | $SSH_CMD "cat > /home/hadoop/sql/mysql_ads_ddl.sql"
+cat "$SCRIPT_DIR/../sql/spark_etl.sql" | $SSH_CMD "cat > /home/hadoop/sql/spark_etl.sql"
+cat "$SCRIPT_DIR/export_to_mysql.py" | $SSH_CMD "cat > /home/hadoop/scripts/export_to_mysql.py && chmod +x /home/hadoop/scripts/export_to_mysql.py"
+cat "$SCRIPT_DIR/run_tag_cloud_mr.sh" | $SSH_CMD "cat > /home/hadoop/scripts/run_tag_cloud_mr.sh && chmod +x /home/hadoop/scripts/run_tag_cloud_mr.sh"
+cat "$SCRIPT_DIR/../mapreduce/mapper.py" | $SSH_CMD "cat > /home/hadoop/mapreduce/mapper.py && chmod +x /home/hadoop/mapreduce/mapper.py"
+cat "$SCRIPT_DIR/../mapreduce/reducer.py" | $SSH_CMD "cat > /home/hadoop/mapreduce/reducer.py && chmod +x /home/hadoop/mapreduce/reducer.py"
+cat "$SCRIPT_DIR/../mapreduce/stopwords.txt" | $SSH_CMD "cat > /home/hadoop/mapreduce/stopwords.txt"
+echo "  SQL、MapReduce 和导出脚本已部署"
+
 # 1. 创建 HDFS 目录
 echo ""
 echo "[1/4] 创建 HDFS 目录..."
@@ -31,10 +45,7 @@ echo "  HDFS 目录已创建"
 # 2. 创建 Hive ODS 外部表
 echo ""
 echo "[2/4] 创建 Hive ODS 外部表..."
-$SSH_CMD "hive -f /home/hadoop/sql/hive_ods_ddl.sql" 2>&1 | tail -5 || {
-    echo "  通过 hive CLI 执行失败，尝试复制 SQL 到 master"
-    cat "$SCRIPT_DIR/../sql/hive_ods_ddl.sql" | $SSH_CMD "cat > /tmp/hive_ods_ddl.sql && hive -f /tmp/hive_ods_ddl.sql" 2>&1 | tail -5
-}
+$SSH_CMD "hive -f /home/hadoop/sql/hive_ods_ddl.sql" 2>&1 | tail -5
 echo "  Hive ODS 表已创建"
 
 # 3. 创建 MySQL ADS 表
@@ -44,11 +55,11 @@ cat "$SCRIPT_DIR/../sql/mysql_ads_ddl.sql" | $SSH_CMD \
     "mysql -u hive -pHive@123456" 2>&1 | tail -5
 echo "  MySQL ADS 表已创建"
 
-# 4. 复制 SQL 到 master
+# 4. 验证远端脚本
 echo ""
-echo "[4/4] 复制 ETL SQL 到 master..."
-cat "$SCRIPT_DIR/../sql/spark_etl.sql" | $SSH_CMD "cat > /home/hadoop/sql/spark_etl.sql"
-echo "  ETL SQL 已部署"
+echo "[4/4] 验证远端脚本..."
+$SSH_CMD "test -s /home/hadoop/sql/spark_etl.sql && test -x /home/hadoop/scripts/export_to_mysql.py && test -x /home/hadoop/mapreduce/mapper.py && test -x /home/hadoop/mapreduce/reducer.py"
+echo "  远端脚本可用"
 
 echo ""
 echo "================================================"

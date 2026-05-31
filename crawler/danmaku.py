@@ -67,7 +67,6 @@ def collect_danmaku(bvid: str, cid: int, db) -> tuple[list[dict] | None, bool]:
 
     rows = []
     segment = 1
-    collected_ids = []
     success = True
 
     existing_ids = db.get_collected_danmaku_ids_for_bvid(bvid)
@@ -149,7 +148,6 @@ def collect_danmaku(bvid: str, cid: int, db) -> tuple[list[dict] | None, bool]:
                 "send_time": e.get("ctime"),
             }
             rows.append(row)
-            collected_ids.append((danmaku_id, bvid))
             existing_ids.add(danmaku_id)
 
             if len(rows) >= remaining:
@@ -158,8 +156,5 @@ def collect_danmaku(bvid: str, cid: int, db) -> tuple[list[dict] | None, bool]:
         segment += 1
         if segment > 100:
             break
-
-    if collected_ids:
-        db.add_danmaku_ids_batch(collected_ids)
 
     return rows, success

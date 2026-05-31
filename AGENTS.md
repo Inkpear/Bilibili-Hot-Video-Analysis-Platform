@@ -7,7 +7,7 @@
 爬取 B站热门排行榜 7 天数据，经 HDFS → Hive → Spark SQL 处理后存入 MySQL，Rust Axum 提供只读 API，React + ECharts 展示交互大屏。
 
 ```
-Python requests 采集(NDJSON) → HDFS → Hive ODS → Spark SQL DWD/DWS/ADS → MySQL → Rust Axum → React
+Python requests 采集(NDJSON) → HDFS → Hive ODS → Spark SQL DWD/DWS/ADS → MapReduce 标题词云 → MySQL → Rust Axum → React
 ```
 
 ## Repo Layout
@@ -50,6 +50,7 @@ Bilibili-Hot-Video-Analysis-Platform/
 | 前端 | React 18 + TypeScript + ECharts |
 | 后端 | Rust Axum，8 个 GET 端点，端口 3000，CORS 全开 |
 | 错误码 | 0=成功，400=参数错误，500=内部错误 |
+| 标签词云 | Hadoop Streaming + Python3/jieba 标题分词，写入 ads_tag_cloud |
 
 ## Cluster Architecture
 
@@ -94,6 +95,10 @@ beeline -u "jdbc:hive2://master:10000"
 # Spark
 spark-shell --master spark://master:7077
 spark-sql --master spark://master:7077
+
+# MapReduce 词云依赖（三节点已安装）
+python3 --version        # Python 3.6.8
+python3 -c "import jieba; print(jieba.__version__)"  # 0.42.1
 
 # 启停
 start-dfs.sh && start-yarn.sh
@@ -142,6 +147,7 @@ virsh net-dhcp-leases hadoop-net
 - [x] 采集脚本开发 — 事务模型：日结模式，每视频按 /view→UP→评论→弹幕 全量采集，fail_count≥3 永久放弃
 - [x] Hive DDL + Spark SQL ETL — ODS/DWD/DWS/ADS 全链路 SQL，已部署到集群
 - [x] MySQL 建表 + 数据导出 — 7 张 ADS 表，Spark JDBC 导出脚本
+- [x] MapReduce 标题词云 — Hadoop Streaming + Python3/jieba，已接入日常管线
 - [ ] Rust 后端 8 个 API 实现
 - [ ] React 前端大屏开发
 - [ ] 课程报告 + PPT
@@ -163,7 +169,7 @@ virsh net-dhcp-leases hadoop-net
 - 资源不存在统一返回 `code=0, data=null`，不使用 404
 - Cookie 不硬编码，使用环境变量 `BILI_COOKIE`
 - Cookie 含分号时不能用 `export $(grep ... | xargs)` 提取（bash 会将 `;` 解析为命令分隔符），必须用 `grep -o | sed` 提取原始值
-- 采集部署在 WSL，通过 `screen -S crawler` 前台监控或 systemd timer 自动触发
+- 采集部署在 WSL，通过 user-level systemd timer 自动触发；日志用 `journalctl --user -u crawler.service -f` 查看
 - systemd `Type=oneshot`：服务运行中 timer 触发会静默跳过，不启动第二个实例
-- 热门视频 tags 全空（B站数据现象），标签词云依赖 MapReduce 标题分词填补
+- 热门视频 tags 全空（B站数据现象），标签词云由 `scripts/run_tag_cloud_mr.sh` 基于 `ads_hot_video_rank.title` 做 MapReduce 标题分词生成
 - 生命周期折线图 Day 1 仅有 1 个快照点（`view_growth=0`），至少需要 2 轮采集

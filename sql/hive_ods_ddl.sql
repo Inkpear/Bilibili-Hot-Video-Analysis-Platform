@@ -94,9 +94,3 @@ CREATE EXTERNAL TABLE ods_up_raw (
 )
 ROW FORMAT SERDE 'org.apache.hive.hcatalog.data.JsonSerDe'
 LOCATION '/data/bilibili/ods/up_info/';
-
--- 验证
-SELECT 'ods_rank_video_raw' AS tbl, COUNT(*) FROM ods_rank_video_raw;
-SELECT 'ods_video_comment_raw' AS tbl, COUNT(*) FROM ods_video_comment_raw;
-SELECT 'ods_video_danmaku_raw' AS tbl, COUNT(*) FROM ods_video_danmaku_raw;
-SELECT 'ods_up_raw' AS tbl, COUNT(*) FROM ods_up_raw;

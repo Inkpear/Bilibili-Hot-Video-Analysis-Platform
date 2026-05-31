@@ -4,11 +4,28 @@
 """
 
 import logging
+import time
 
-from config import MAX_COMMENTS, REPLY_PS, REPLY_SORT
-from utils import api_get_safe
+import requests
+
+from config import MAX_COMMENTS, REPLY_PS, REPLY_SORT, DELAY
+from config import API_BASE, HEADERS, COOKIE, TIMEOUT
 
 logger = logging.getLogger("crawler")
+
+
+def _reply_get(params):
+    headers = dict(HEADERS)
+    headers["Cookie"] = COOKIE
+    resp = requests.get(
+        f"{API_BASE}/x/v2/reply",
+        params=params,
+        headers=headers,
+        timeout=TIMEOUT,
+    )
+    time.sleep(DELAY)
+    resp.raise_for_status()
+    return resp.json()
 
 
 def collect_comments(bvid: str, aid: int, db) -> tuple[list[dict] | None, bool]:
@@ -21,7 +38,6 @@ def collect_comments(bvid: str, aid: int, db) -> tuple[list[dict] | None, bool]:
     """
     rows = []
     page = 1
-    collected_ids = []
     success = True
 
     existing_ids = db.get_collected_comment_ids_for_bvid(bvid)
@@ -30,12 +46,21 @@ def collect_comments(bvid: str, aid: int, db) -> tuple[list[dict] | None, bool]:
         return None, True
 
     while len(rows) < remaining:
-        data = api_get_safe(
-            "/x/v2/reply",
-            {"type": 1, "oid": aid, "pn": page, "ps": REPLY_PS, "sort": REPLY_SORT},
-            need_cookie=True,
-        )
-        if data is None:
+        try:
+            data = _reply_get(
+                {"type": 1, "oid": aid, "pn": page, "ps": REPLY_PS, "sort": REPLY_SORT}
+            )
+        except Exception as e:
+            logger.error(f"评论采集失败 {bvid}: {e}")
+            success = False
+            break
+
+        code = data.get("code")
+        if code == 12061:
+            logger.info(f"  {bvid} 评论区关闭，按 0 条评论完成")
+            break
+        if code != 0:
+            logger.error(f"评论采集失败 {bvid}: code={code} {data.get('message', '')}")
             success = False
             break
 
@@ -62,15 +87,11 @@ def collect_comments(bvid: str, aid: int, db) -> tuple[list[dict] | None, bool]:
                 "comment_time": r.get("ctime", 0),
             }
             rows.append(row)
-            collected_ids.append((comment_id, bvid))
             existing_ids.add(comment_id)
 
             if len(rows) >= remaining:
                 break
 
         page += 1
-
-    if collected_ids:
-        db.add_comment_ids_batch(collected_ids)
 
     return rows, success

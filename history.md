@@ -717,3 +717,100 @@ yarn node -list                     # 3 nodes RUNNING
 | UP 主独立提交 | 跨视频共享数据，不应因一个视频失败而丢弃 UP 信息 |
 | screen 托管 vs systemd | screen 提供 TTY → tqdm 动态进度条；systemd 用于自动定时触发 |
 | Cookie 提取 | `grep -o \| sed`，不能用 `xargs`（`;` 会被 bash 误解析） |
+
+---
+
+## 2026-05-31 17:35 - 自动化采集日志与部署修复
+
+### 目标
+将爬虫从 screen 人工托管切回 systemd 全自动采集，同时解决 tqdm 在文本日志中不可读的问题。
+
+### 关键调整
+- 停止 WSL 上正在运行的 screen 采集进程，清理中断快照状态，准备从干净状态重新自动采集。
+- `crawler/main.py`：TTY 下保留 tqdm；非 TTY/systemd 下输出逐视频 `INFO` 文本进度，便于 `journalctl --user -u crawler.service -f` 查看。
+- `crawler/main.py`：详情、UP、评论、弹幕文件写入后立即 flush，再标记 SQLite 状态，降低异常中断导致“DB 已标记但文件未落盘”的风险。
+- `crawler/comment.py`：评论区关闭 `code=12061` 视为 0 条评论完成，不再反复失败重试。
+- `crawler/crawler.service`：改为 user-level systemd 单元，使用 `%h` 路径和 journald 输出。
+- `scripts/deploy_crawler.sh`：同步 `crawler/`、`scripts/`、`sql/` 到 WSL，安装 `~/.config/systemd/user/crawler.{service,timer}`，不依赖 sudo。
+- `scripts/upload_hdfs.sh`：HDFS 验证改为远端 master 执行，上传使用 `-put -f` 支持幂等覆盖。
+- `scripts/setup_pipeline.sh`：自动部署 Hive/Spark/MySQL SQL 和 Spark JDBC 导出脚本到 master。
+- `scripts/export_to_mysql.py`：任一 ADS 表导出失败时返回非 0，避免管线假成功。
+
+### 验证
+```bash
+python3 -m py_compile crawler/*.py scripts/export_to_mysql.py scripts/extract_cookie.py
+bash -n scripts/setup_pipeline.sh scripts/run_pipeline.sh scripts/upload_hdfs.sh scripts/deploy_crawler.sh
+bash scripts/deploy_crawler.sh --env-file scripts/.env
+ssh UbuntuDesktop "bash /home/inkpear/scripts/setup_pipeline.sh"
+ssh UbuntuDesktop "systemctl --user status crawler.timer --no-pager"
+ssh UbuntuDesktop "systemd-analyze --user verify crawler.service crawler.timer"
+```
+
+### 结果
+- WSL user-level `crawler.timer` 已 enabled + active，下一次自动触发为 `2026-06-01 00:00:46 CST`。
+- master 端 `/home/hadoop/sql/*.sql` 与 `/home/hadoop/scripts/export_to_mysql.py` 已部署且 hash 与本地一致。
+- Hive ODS 表与 MySQL ADS 表初始化完成。
+- 当前不再依赖 screen；日志查看方式为 `journalctl --user -u crawler.service -f`。
+
+---
+
+## 2026-05-31 18:10 - 标签词云 MapReduce 接入
+
+### 目标
+修复 B站热门视频 tags 为空导致 `ads_tag_cloud` 无数据的问题，将词云改为基于标题分词的 MapReduce 词频统计。
+
+### 关键调整
+- 新增 `mapreduce/mapper.py`、`mapreduce/reducer.py`、`mapreduce/stopwords.txt`，用于 Hadoop Streaming 标题分词词频统计。
+- mapper 优先使用 `jieba`，节点无 jieba 时自动降级为内置中文 n-gram 分词。
+- 集群 CentOS 7 节点仅有 Python 2.7，因此 mapper/reducer 改为 Python 2/3 双兼容，并用 `python mapper.py` 运行。
+- 新增 `scripts/run_tag_cloud_mr.sh`：从 Spark/Hive `ads_hot_video_rank` 生成标题输入，运行 Hadoop Streaming，写回 Hive `ads_tag_cloud`。
+- `scripts/run_pipeline.sh` 改为 4 步：上传 HDFS → Spark ETL → 标题词云 MapReduce → MySQL 导出。
+- `sql/spark_etl.sql` 中 `ads_tag_cloud` 改为空表占位，由 MapReduce 阶段覆盖写入。
+- `scripts/deploy_crawler.sh` 和 `scripts/setup_pipeline.sh` 同步/部署 `mapreduce/` 到 WSL 和 master。
+- Hadoop Streaming 显式设置 `HADOOP_MAPRED_HOME=/opt/hadoop`，避免 YARN AM 找不到 `MRAppMaster`。
+
+### 验证
+```bash
+python3 -m py_compile mapreduce/mapper.py mapreduce/reducer.py
+bash -n scripts/run_tag_cloud_mr.sh scripts/run_pipeline.sh scripts/setup_pipeline.sh
+bash scripts/deploy_crawler.sh --env-file scripts/.env
+ssh UbuntuDesktop "bash /home/inkpear/scripts/setup_pipeline.sh"
+
+# master 上临时 HDFS 输入执行 Hadoop Streaming smoke test，通过后清理 /tmp/bili_mr_smoke_*
+```
+
+### 结果
+- Hadoop Streaming smoke test 成功，`/tmp/bili_mr_smoke_out/part-*` 输出 `category\ttag\tcount` 格式词频。
+- 词云已纳入 systemd 自动采集后的 `run_pipeline.sh`，无需手工运行。
+
+---
+
+## 2026-05-31 18:20 - 集群 Python3/jieba 依赖安装
+
+### 目标
+为标题词云 MapReduce 安装缺失依赖，使 Hadoop Streaming 能直接使用 `python3 mapper.py` 和 jieba 分词。
+
+### 操作
+在 master、worker1、worker2 三台 CentOS 7 节点以 root 安装：
+```bash
+yum install -y python3 python3-pip
+python3 -m pip install -q jieba
+```
+
+### 验证
+三台节点均通过：
+```bash
+python3 --version        # Python 3.6.8
+pip3 --version           # pip 9.0.3
+python3 -c "import jieba; print(jieba.__version__)"  # 0.42.1
+```
+
+随后将 `scripts/run_tag_cloud_mr.sh` 的 Hadoop Streaming 命令切换为：
+```bash
+-mapper 'python3 mapper.py'
+-reducer 'python3 reducer.py'
+```
+
+### 结果
+- Hadoop Streaming Python3 + jieba smoke test 成功。
+- 示例标题 `原神新角色实机演示伤害爆炸` 输出正常词项：`原神`、`角色`、`实机`、`演示`、`伤害`、`爆炸`，不再退化为 n-gram 噪声词。
