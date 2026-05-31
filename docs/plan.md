@@ -46,34 +46,44 @@ B站排行 API (Python requests)
 
 | 参数 | 值 |
 |---|---|
-| 数据源 | 全站热门 + 10 个分区榜 + 每周必看 |
-| 10 个分区 | 动画(1)、番剧(13)、游戏(4)、娱乐(5)、生活(160)、音乐(3)、舞蹈(129)、科技(188)、知识(36)、影视(181) |
+| 数据源 | 全站热门 + 9 个分区榜 |
+| 包含分区 | 动画(1)、游戏(4)、娱乐(5)、生活(160)、音乐(3)、舞蹈(129)、科技(188)、知识(36)、影视(181) |
 | 采集周期 | 7 天 |
-| 快照频率 | 每 6 小时 1 次，共 28 个时间点 |
+| 快照频率 | 每天 1 轮，共 7 轮 |
 | 评论限制 | 每视频 200 条（去重后只采一次） |
 | 弹幕限制 | 每视频 3000 条（去重后只采一次） |
 
-**采集策略**：
+**采集策略**（日结事务模式）：
+
+每轮对每个新发现或上次有缺失的 bvid，按序采集 /view → UP → 评论 → 弹幕。
+全部成功则标完成（has_detail/comments/danmaku 全部=1），任何一项失败则 fail_count++（≥3 永久放弃）。
+UP 主作为视频内嵌环节独立提交（成功即写入，不参与视频事务回滚）。
+
+> **已知数据限制**：
+> - B站热门视频 `/x/web-interface/view` 返回的 `tags` 字段全部为空（数据源现象，非代码问题）。标签词云需通过后续 Stage 的 MapReduce 标题分词填补。
+> - 生命周期图表（`ads_video_lifecycle`）Day 1 只有 1 个快照点，`view_growth=0`、`rank_change=0`。至少 2 天采集后才有增量和排名变化数据。
 
 | 数据类型 | 采集频率 | 去重键 | 说明 |
 |---|---|---|---|
-| 排行榜快照 | 每 6 小时 | `bvid + snapshot_id + rank_source` | 28 个快照点，每次全量采集 |
-| 视频详情 | 首次 + 变更 | `bvid` | 已采集过的 bvid 不重复请求；weekly 来源必须走 `/view` 补充完整 stat 和 tags |
-| UP 主信息 | 首次 + 变更 | `up_id` | 按 up_id 去重 |
-| 评论 | 首次 | `comment_id` | 每个 bvid 最多采集 200 条，只采一次 |
-| 弹幕 | 首次 | `danmaku_id` | 每个 bvid 最多 3000 条，只采一次 |
+| 排行榜快照 | 每天 1 次 | `bvid + snapshot_id + rank_source` | 7 个时间点，每次全量采集 |
+| 视频详情 | 首次 + 缺失重试 | `bvid` | has_detail=0 时采集，失败下轮重试 |
+| UP 主信息 | 首次 + 失败冷却 | `up_id` | 嵌入 per-video 循环，失败 3 次后 24h 冷却 |
+| 评论 | 首次 + 缺失重试 | `comment_id` | 每 bvid 最多 200 条，采集完标记 has_comments=1 |
+| 弹幕 | 首次 + 缺失重试 | `danmaku_id` | 每 bvid 最多 3000 条，采集完标记 has_danmaku=1 |
+
+进度展示：TTY 前台运行时使用 tqdm；systemd 非 TTY 运行时输出逐视频 `INFO` 文本日志。采集部署为 user-level systemd 常驻服务，启动即采集，采集完成后休眠 6 小时再进入下一轮。
 
 ### 3.2 数据规模
 
 | 项目 | 估算 |
 |---|---|
 | 独立视频 | ~500 个（保守估计，7 天榜单轮换可能达 1000-2000） |
-| 视频快照 | ~14,000 行（500 × 28，实际可达 28,000-56,000） |
+| 视频快照 | ~3,500 行（500 × 7，实际按轮换频率可达 7,000-14,000） |
 | 评论 | ~100,000 行 |
 | 弹幕 | ~1,500,000 行 |
 | ODS 总大小 | ~500MB~2GB |
 
-> 以上为保守下限。实际独立视频数取决于榜单轮换频率：热门和每周必看每轮更新较多，分区榜相对稳定。7 天内可能积累 1000-2000 个独立 bvid。Hadoop 环境需预留足够存储空间。
+> 以上为保守下限。实际独立视频数取决于榜单轮换频率。7 天内可能积累 1000-2000 个独立 bvid。Hadoop 环境需预留足够存储空间。
 
 ### 3.3 统一字段字典
 
@@ -86,7 +96,7 @@ B站排行 API (Python requests)
 | bvid | STRING | `item["bvid"]` | BV 号，主键 |
 | title | STRING | `item["title"]` | 标题 |
 | description | STRING | `/view` 补充 | 简介 |
-| category | STRING | 请求分区或 tname 向上映射 | 十大分区名（动画/游戏/…）；popular/weekly 按 tname 归并，无法归并时为"其他" |
+| category | STRING | 请求分区或 tname 向上映射 | 九大分区名（动画/游戏/…）；popular 按 tname 归并，无法归并时为"其他" |
 | sub_category | STRING | `item["tname"]` | API 返回的子分区名 |
 | tags | STRING | `/view` 补充 | 逗号分隔标签 |
 | duration | INT | `item["duration"]` | 秒 |
@@ -97,7 +107,7 @@ B站排行 API (Python requests)
 | url | STRING | 拼接 | 视频链接 |
 | aid | BIGINT | `item["aid"]` | 评论接口的 oid |
 | cid | BIGINT | `item["cid"]` | 弹幕接口的 oid |
-| rank_source | STRING | 采集时设定 | `popular` / `ranking` / `weekly` |
+| rank_source | STRING | 采集时设定 | `popular` / `ranking` |
 | rank_name | STRING | 采集时设定 | 来源榜单名，如"全站热门"/"游戏榜" |
 
 **视频快照 (dwd_video_snapshot)** — 分区键 `snapshot_date`
@@ -114,7 +124,7 @@ B站排行 API (Python requests)
 | reply_count | BIGINT | `item["stat"]["reply"]` |
 | danmaku_count | BIGINT | `item["stat"]["danmaku"]` |
 | rank_position | INT | 采集时序号 |
-| rank_source | STRING | `popular` / `ranking` / `weekly` |
+| rank_source | STRING | `popular` / `ranking` |
 | rank_name | STRING | 来源榜单名，如"全站热门"/"游戏榜" |
 | snapshot_id | STRING | 快照批次标识，格式 `yyyyMMdd_HHmm`，同一批次所有记录共用 |
 | collect_time | BIGINT | 采集时毫秒级时间戳 |
@@ -251,8 +261,6 @@ HDFS 目录结构：
 | 视频详情 | `GET /x/web-interface/view` | `bvid` | ✅ | [`api-demo/demo_view.py`](../api-demo/demo_view.py) |
 | 评论列表 | `GET /x/v2/reply` | `type=1`, `oid`(aid), `pn`, `ps`, `sort=1` | ✅ | [`api-demo/demo_reply.py`](../api-demo/demo_reply.py) |
 | 弹幕内容 | `GET /x/v2/dm/web/seg.so` | `type=1`, `oid`(cid), `segment_index` | ❌ | [`api-demo/demo_danmaku.py`](../api-demo/demo_danmaku.py) |
-| 每周必看列表 | `GET /x/web-interface/popular/series/list` | — | ❌ | [`api-demo/demo_weekly_list.py`](../api-demo/demo_weekly_list.py) |
-| 每周必看内容 | `GET /x/web-interface/popular/series/one` | `number` | ❌ | [`api-demo/demo_weekly_content.py`](../api-demo/demo_weekly_content.py) |
 | UP主信息 | `GET /x/wbi/acc/info` | `mid`, `w_rid`, `wts` | ✅ + WBI | [`api-demo/demo_up_info.py`](../api-demo/demo_up_info.py) |
 
 > 所有 Demo 脚本自包含，详情见 [`api-demo/README.md`](../api-demo/README.md)。
@@ -263,8 +271,8 @@ HDFS 目录结构：
 - follower_count 需通过 WBI 签名的 UP 主接口 `/x/wbi/acc/info` 获取。
 - 评论的 `oid` 参数是视频的 `aid`（不是 bvid）。
 - 弹幕的 `oid` 参数是视频的 `cid`，使用段式 API，每 6 分钟一段。
-- **分区 `category` 映射规则**：`ranking` 来源直接用 `CATEGORY_NAMES[rid]`（十大分区之一）；`popular` 来源使用 API 返回的 `item["tname"]` 向上归并到十大分区（如"MAD·AMV"→"动画"），无法归并时设为"其他"；`weekly` 来源同 popular。采集时需维护一份 `tname → category` 映射表。
-- **快照批次 `snapshot_id`**：每 6 小时一轮采集开始时生成一个批次标识，格式 `yyyyMMdd_HHmm`（如 `20260601_0000`）。本轮所有 API 请求产生的记录共用同一个 `snapshot_id`。后续 ADS 中"最新快照"统一用 `MAX(snapshot_id)` 而非逐条 `collect_time`。
+- **分区 `category` 映射规则**：`ranking` 来源直接用 `CATEGORY_NAMES[rid]`（九大分区之一）；`popular` 来源使用 API 返回的 `item["tname"]` 向上归并到九大分区（如"MAD·AMV"→"动画"），无法归并时设为"其他"。采集时需维护一份 `tname → category` 映射表。
+- **快照批次 `snapshot_id`**：每天一轮采集开始时生成一个批次标识，格式 `yyyyMMdd_HHmm`（如 `20260601_0000`）。本轮所有 API 请求产生的记录共用同一个 `snapshot_id`。后续 ADS 中"最新快照"统一用 `MAX(snapshot_id)` 而非逐条 `collect_time`。
 
 **Cookie 配置**：
 
@@ -277,10 +285,10 @@ HEADERS = {
     "Referer": "https://www.bilibili.com",
 }
 COOKIE = os.environ.get("BILI_COOKIE", "")
-DELAY = 1.0
+DELAY = 2.0
 
 CATEGORY_RIDS = {
-    "动画": 1, "番剧": 13, "游戏": 4, "娱乐": 5, "生活": 160,
+    "动画": 1, "游戏": 4, "娱乐": 5, "生活": 160,
     "音乐": 3, "舞蹈": 129, "科技": 188, "知识": 36, "影视": 181,
 }
 CATEGORY_NAMES = {v: k for k, v in CATEGORY_RIDS.items()}
@@ -290,13 +298,15 @@ CATEGORY_NAMES = {v: k for k, v in CATEGORY_RIDS.items()}
 
 ```
 crawler/
-├── main.py              # 入口，调度各模块；读取环境变量 BILI_COOKIE
-├── rank_spider.py       # 全站热门 + 分区排行（popular + ranking/v2）+ 每周必看
+├── main.py              # 入口，per-video 事务编排
+├── rank_spider.py       # 全站热门 + 分区排行（popular + ranking/v2）
 ├── video_detail.py      # 视频详情补充字段（description、tags、aid、cid）
 ├── up_info.py           # UP 主粉丝数（WBI 签名）
 ├── comment.py           # 评论（oid=aid，sort=1，每 bvid 最多 200 条）
 ├── danmaku.py           # 弹幕（oid=cid，protobuf 解析，每 bvid 最多 3000 条）
-└── utils.py             # 请求头、限速(≥1s)、重试、WBI 签名、protobuf 解析
+├── db.py                # SQLite 状态管理：去重/失败追踪/快照日志
+├── config.py            # 全局配置：Cookie/DELAY/分区映射
+└── utils.py             # 请求头、限速(≥2s)、重试、WBI 签名、protobuf 解析
 ```
 
 **采集输出格式**：每个采集批次一个目录，所有文件均为 NDJSON（每行一个 JSON 对象）。
@@ -571,7 +581,6 @@ FROM (
             ORDER BY CASE rank_source
                 WHEN 'popular' THEN 1
                 WHEN 'ranking' THEN 2
-                WHEN 'weekly'  THEN 3
                 ELSE 9
             END,
             CASE WHEN category != '其他' AND category IS NOT NULL THEN 0 ELSE 1 END,
@@ -704,7 +713,6 @@ WITH canonical AS (
                 ORDER BY CASE rank_source
                     WHEN 'popular' THEN 1
                     WHEN 'ranking' THEN 2
-                    WHEN 'weekly'  THEN 3
                     ELSE 9
                 END
             ) AS rn
@@ -775,7 +783,7 @@ WHERE s.bvid IN (SELECT bvid FROM top_videos)
   AND s.rank_source = 'popular';
 ```
 
-> `rank_change` 正数 = 排名上升（数值变小），负数 = 排名下降。第一个点 `view_growth = 0`, `rank_change = 0`。TOP 视频按最新快照的 `view_count` 降序选取，默认使用 `rank_source='popular'` 以保证排名可比较。`/api/lifecycle` 和 `/api/lifecycle/top` 只覆盖 popular 样本；若 bvid 不在 popular 生命周期中，返回 `data=null`。
+> `rank_change` 正数 = 排名上升（数值变小），负数 = 排名下降。第一个点 `view_growth = 0`，`rank_change = 0`。Day 1 仅有 1 个快照点，需 ≥2 天数据才有折线。TOP 视频按最新快照的 `view_count` 降序选取，默认使用 `rank_source='popular'` 以保证排名可比较。`/api/lifecycle` 和 `/api/lifecycle/top` 只覆盖 popular 样本；若 bvid 不在 popular 生命周期中，返回 `data=null`。
 
 **5.3 UP 主汇总 (dws_up_summary_stats)**
 
@@ -790,7 +798,6 @@ WITH canonical AS (
                 ORDER BY CASE rank_source
                     WHEN 'popular' THEN 1
                     WHEN 'ranking' THEN 2
-                    WHEN 'weekly'  THEN 3
                     ELSE 9
                 END
             ) AS rn
@@ -826,7 +833,6 @@ WITH canonical AS (
                 ORDER BY CASE rank_source
                     WHEN 'popular' THEN 1
                     WHEN 'ranking' THEN 2
-                    WHEN 'weekly'  THEN 3
                     ELSE 9
                 END
             ) AS rn
@@ -860,7 +866,6 @@ WITH latest AS (
                 ORDER BY CASE rank_source
                     WHEN 'popular' THEN 1
                     WHEN 'ranking' THEN 2
-                    WHEN 'weekly'  THEN 3
                     ELSE 9
                 END
             ) AS rn
@@ -925,7 +930,6 @@ WITH canonical AS (
                 ORDER BY CASE rank_source
                     WHEN 'popular' THEN 1
                     WHEN 'ranking' THEN 2
-                    WHEN 'weekly'  THEN 3
                     ELSE 9
                 END
             ) AS rn
@@ -952,18 +956,16 @@ GROUP BY v.category;
 **5.7 标签词云 (ads_tag_cloud)**
 
 ```sql
-CREATE TABLE ads_tag_cloud AS
-SELECT
-    TRIM(tag) AS tag,
-    COUNT(*) AS tag_count,
-    v.category
-FROM dwd_video_info v
-LATERAL VIEW EXPLODE(SPLIT(v.tags, ',')) t AS tag
-WHERE tag IS NOT NULL AND TRIM(tag) != ''
-GROUP BY TRIM(tag), v.category;
+CREATE TABLE ads_tag_cloud (
+    tag        STRING,
+    tag_count  INT,
+    category   STRING
+)
+STORED AS PARQUET;
 ```
 
-> 如果课程要求使用 MapReduce 做词频统计，可将 `dwd_video_info` 的 `title` 导出为 HDFS 文本，用 MapReduce + jieba 分词得到词频，再与 `ads_tag_cloud` 结合。
+> 热门视频 tags 天然为空（B站数据现象，详见 §3.1 已知限制），`ads_tag_cloud` 由后续 `scripts/run_tag_cloud_mr.sh` 覆盖写入。
+> 输入来自最新 `ads_hot_video_rank` 的 `category\ttitle`，Hadoop Streaming 使用 Python3 + jieba 做标题分词，输出全站与分区词频。
 
 **5.8 视频生命周期 ADS (ads_video_lifecycle)**
 
@@ -1003,19 +1005,27 @@ SELECT * FROM dws_up_summary_stats;
 
 **MapReduce 任务：标题词频统计**
 
-```java
-// TitleWordCount.java
-// 输入：HDFS /data/bilibili/mr_input/titles.txt（每行一个 bvid\ttitle）
-// 输出：HDFS /data/bilibili/mr_output/（word\tcount）
-//
-// Mapper: 对 title 进行中文分词（jieba / SimpleTokenizer），输出 <word, 1>
-// Reducer: 汇总词频，输出 <word, count>
-//
-// 运行命令：
-//   hadoop jar titlewordcount.jar TitleWordCount /data/bilibili/mr_input /data/bilibili/mr_output
-//
-// 结果可导入 MySQL ads_tag_cloud 表作为补充词源。
+```text
+mapreduce/
+├── mapper.py       # Python3/jieba 标题分词，输出 category\tword\t1
+├── reducer.py      # 聚合 category + word 词频
+└── stopwords.txt   # 停用词
 ```
+
+运行脚本：
+
+```bash
+bash scripts/run_tag_cloud_mr.sh
+```
+
+HDFS 输入输出：
+
+```text
+/data/bilibili/mr_input/title_words   # category\ttitle
+/data/bilibili/mr_output/title_words  # category\ttag\ttag_count
+```
+
+结果写回 Hive `ads_tag_cloud`，其中 `category='全站'` 表示全局词云，其余为分区词云。
 
 **验证**：
 
@@ -1029,24 +1039,32 @@ SELECT bvid, COUNT(*) FROM ads_video_lifecycle GROUP BY bvid;
 
 ### Stage 6: Export to MySQL
 
-**目标**：将 ADS 结果同步到 MySQL。推荐使用 Spark JDBC。
+**目标**：将 ADS 结果同步到 MySQL。使用 PySpark JDBC。
 
 ```bash
-# Spark JDBC 导出（推荐）
-spark-submit --class com.example.ExportToMysql \
-  --jars mysql-connector-j-8.x.jar \
-  export.jar
+# 自动管线（部署在 WSL，crawler 完成后触发）
+bash scripts/run_pipeline.sh
+
+# 或手动执行各步骤:
+# Step 1: 上传 NDJSON 到 HDFS
+bash scripts/upload_hdfs.sh
+
+# Step 2: Spark SQL ETL（在 master 上运行）
+ssh hadoop@master spark-sql --master spark://master:7077 -f /home/hadoop/sql/spark_etl.sql
+
+# Step 3: 标题词云 MapReduce（在 WSL 脚本中远程触发 master）
+bash scripts/run_tag_cloud_mr.sh
+
+# Step 4: Spark JDBC 导出到 MySQL
+ssh hadoop@master spark-submit --jars /opt/spark/jars/mysql-connector-j-8.0.33.jar \
+    --master spark://master:7077 \
+    /home/hadoop/scripts/export_to_mysql.py
+
+# 首次初始化（只需一次）
+bash scripts/setup_pipeline.sh
 ```
 
-或使用 Python 脚本：
-
-```python
-# scripts/export_to_mysql.py
-# 使用 pandas + sqlalchemy 从 Hive/Spark 结果导入 MySQL
-# 先 TRUNCATE 目标表，再 INSERT，保证幂等
-```
-
-**MySQL 建表（完整，与 API 响应字段一一对应）**：
+**MySQL 建表**（`sql/mysql_ads_ddl.sql`，与 API 响应字段一一对应）：
 
 ```sql
 CREATE DATABASE IF NOT EXISTS bilibili DEFAULT CHARSET utf8mb4;
@@ -1256,7 +1274,7 @@ tower-http = { version = "0.5", features = ["cors"] }
 | 字段 | 类型 | 说明 |
 |---|---|---|
 | video_count | int | 最新快照中的视频数 |
-| category_count | int | 涉及分区数（通常 ≤10，若存在"其他"分区则可能为 11） |
+| category_count | int | 涉及分区数（通常 ≤9，若存在"其他"分区则可能为 10） |
 | up_count | int | 涉及 UP 主数 |
 | total_views | int | 样本累计播放量 |
 | total_interactions | int | 点赞+投币+收藏+评论+分享总和 |
@@ -1421,7 +1439,7 @@ tower-http = { version = "0.5", features = ["cors"] }
 | view_count | int | 该时间点播放量 |
 | like_count | int | 该时间点点赞数 |
 | rank_position | int | 排名 |
-| rank_source | string | 来源榜单：popular/ranking/weekly |
+| rank_source | string | 来源榜单：popular/ranking |
 | rank_name | string | 来源榜单名 |
 | view_growth | int | 较上一时间点播放增量（首个点为 0） |
 | rank_change | int | 较上一时间点排名变化（正=上升，首个点为 0） |
@@ -2152,15 +2170,16 @@ cd frontend && npm run dev
 ## 8. Deliverables
 
 | 产出 | 内容 | 目录/文件 |
-|---|---|---|
+|---|---|---|---|
 | 采集脚本 | Python 爬虫，NDJSON 输出，含 WBI 签名、protobuf 解析 | `crawler/` |
-| 采集数据示例 | 1 个批次的 NDJSON 输出示例 | `output/sample/` |
+| 采集数据示例 | 采集输出的 NDJSON 格式示例 | `output/` |
 | HDFS 上传脚本 | 批量上传 ODS 数据的 shell 脚本 | `scripts/upload_hdfs.sh` |
-| Hive DDL | ODS 外部表 + DWD/DWS 管理表建表语句 | `sql/hive_ddl.sql` |
-| Spark SQL ETL | DWD 清洗 + DWS/ADS 分析 SQL 脚本 | `sql/analysis.sql` |
+| Hive DDL | ODS 外部表建表语句 | `sql/hive_ods_ddl.sql` |
+| Spark SQL ETL | DWD 清洗 + DWS/ADS 分析 SQL 脚本 | `sql/spark_etl.sql` |
 | MapReduce 作业 | 标题词频统计 | `mapreduce/` |
-| MySQL DDL | ADS 表建表语句 | `sql/mysql_ddl.sql` |
-| 数据导出脚本 | Spark JDBC / Python 导出脚本 | `scripts/export_to_mysql.sh` |
+| MySQL DDL | ADS 表建表语句 | `sql/mysql_ads_ddl.sql` |
+| 数据导出脚本 | PySpark JDBC 导出脚本 | `scripts/export_to_mysql.py` |
+| 管线脚本 | 日常 ETL 编排 + 首次初始化 | `scripts/run_pipeline.sh` / `scripts/setup_pipeline.sh` |
 | 后端代码 | Rust Axum 项目，8 个只读 API 端点 | `backend/` |
 | 前端代码 | React + ECharts 大屏项目 | `frontend/` |
 | 测试脚本 | API 端点验证脚本 | `scripts/test_api.sh` |

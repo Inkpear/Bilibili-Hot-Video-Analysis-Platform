@@ -632,3 +632,213 @@ spark-sql --master spark://master:7077 -e "SHOW DATABASES;"
 | spark-defaults.sh 命名错误 | 应为 spark-defaults.conf，Spark 不读取 .sh |
 | Spark 缺少 MySQL JDBC driver | 从 Hive lib 复制 mysql-connector-j 到 spark/jars |
 | Spark 找不到 Hive metastore | 创建 hive-site.xml 软链接到 spark/conf |
+
+---
+
+## 2026-05-31 全天 — 爬虫架构重写与数据管线部署
+
+### 目标
+将爬虫从队列分摊模型重构为 per-video 事务模型，部署到 WSL 自动采集，打通 HDFS→Hive→Spark→MySQL 全链路。
+
+### 重构内容
+
+**模型变更**：
+- 删除 `queue_comments`/`queue_danmaku` 两张队列表及全部 CRUD 方法
+- 新增 `process_video()` 单视频事务编排器：/view → UP → 评论 → 弹幕
+- 新增 `fail_count` 失败追踪（≥3 永久放弃）和 `discover_new_items` 返回 retry 列表
+- 输出改为流式追加写入（除 rank_video 仍为批量 ~1000 行）
+- tqdm 单条全局进度条 + `pbar.write()` 逐视频状态行
+- systemd timer 从每 6h × 28 改为每天 1 轮 × 7 轮（`OnCalendar=daily`）
+
+**数据减法**：
+- 移除番剧(rid=13) — B站已下线
+- 移除每周必看 — API 返回 code=-352
+
+**Bug 修复**：
+| 问题 | 解决 |
+|---|---|
+| `snapshot_id` 格式不一致（HHmmss vs HHmm） | 统一为 `yyyyMMdd_HHmm` |
+| `deploy_crawler.sh` rsync 源路径错误 | `$SCRIPT_DIR` → `$CRAWLER_DIR` |
+| description 合并到 rank_video 未生效 | 在 `process_video` 中正确定向修改 row 后再合并 |
+| tqdm 4.67.3 + Python 3.13 兼容性 | `disable=not sys.stderr.isatty()` with screen TTY |
+| WBI 签名 `-352` 风控失败 | Cookie 中 `;` 被 bash 解析为命令分隔符，改用 `grep -o \| sed` 提取 |
+| 后台日志不实时写入 | screen 托管（TTY → 无缓冲问题） |
+
+### 数据管线建设
+
+**SQL 脚本**（部署在 `sql/`）：
+- `hive_ods_ddl.sql` — 4 张 Hive 外部表（JsonSerDe）
+- `spark_etl.sql` — ODS→DWD(5)→DWS(3)→ADS(7) 全链路
+- `mysql_ads_ddl.sql` — 7 张 MySQL ADS 表
+
+**管线脚本**（部署在 `scripts/`）：
+- `upload_hdfs.sh` — NDJSON → HDFS（从 WSL 通过 sshpass 上传）
+- `export_to_mysql.py` — PySpark JDBC 导出（TRUNCATE + INSERT）
+- `run_pipeline.sh` — 日常 ETL 编排
+- `setup_pipeline.sh` — 首次集群初始化
+- `start_crawler.sh` — screen 会话启动脚本（正确提取 Cookie）
+
+**集群部署验证**（在 master:192.168.100.10）：
+```bash
+# HDFS 目录
+hdfs dfs -ls /data/bilibili/ods/     # rank_video, video_comment, video_danmaku, up_info
+
+# Hive 表
+hive -e "SHOW TABLES;"               # ods_*_raw × 4
+
+# MySQL 表
+mysql -u hive -pHive@123456 bilibili -e "SHOW TABLES;"
+# ads_screen_overview, ads_hot_video_rank, ads_partition_compare,
+# ads_video_lifecycle, ads_partition_daily, ads_up_summary, ads_tag_cloud
+
+# Spark 连通
+spark-sql --master spark://master:7077 -e "SHOW DATABASES;"  # bilibili, default
+
+# YARN 节点
+yarn node -list                     # 3 nodes RUNNING
+```
+
+### 部署状态
+
+| 组件 | 位置 | 状态 |
+|---|---|---|
+| crawler | WSL `~/crawler/` | screen 会话运行中（14:37 启动） |
+| systemd timer | WSL user-level | active，明天 00:00 触发 |
+| Hive Metastore + HiveServer2 | master | RUNNING |
+| Spark Master + 2 Workers | master + worker1/2 | RUNNING |
+| MySQL 8.0.46 | master | RUNNING，数据库 bilibili 已就绪 |
+
+### 关键设计决策
+
+| 决策 | 理由 |
+|---|---|
+| 日结 vs 分摊 | 每天 1 轮贪心全量消费队列，保证每天数据完整，首日 ~7h 后续 <15min |
+| per-video 事务 vs 分步队列 | 队列模型维护复杂，事务模型天然保证数据一致性 |
+| UP 主独立提交 | 跨视频共享数据，不应因一个视频失败而丢弃 UP 信息 |
+| screen 托管 vs systemd | screen 提供 TTY → tqdm 动态进度条；systemd 用于自动定时触发 |
+| Cookie 提取 | `grep -o \| sed`，不能用 `xargs`（`;` 会被 bash 误解析） |
+
+---
+
+## 2026-05-31 17:35 - 自动化采集日志与部署修复
+
+### 目标
+将爬虫从 screen 人工托管切回 systemd 全自动采集，同时解决 tqdm 在文本日志中不可读的问题。
+
+### 关键调整
+- 停止 WSL 上正在运行的 screen 采集进程，清理中断快照状态，准备从干净状态重新自动采集。
+- `crawler/main.py`：TTY 下保留 tqdm；非 TTY/systemd 下输出逐视频 `INFO` 文本进度，便于 `journalctl --user -u crawler.service -f` 查看。
+- `crawler/main.py`：详情、UP、评论、弹幕文件写入后立即 flush，再标记 SQLite 状态，降低异常中断导致“DB 已标记但文件未落盘”的风险。
+- `crawler/comment.py`：评论区关闭 `code=12061` 视为 0 条评论完成，不再反复失败重试。
+- `crawler/crawler.service`：改为 user-level systemd 单元，使用 `%h` 路径和 journald 输出。
+- `scripts/deploy_crawler.sh`：同步 `crawler/`、`scripts/`、`sql/` 到 WSL，安装 `~/.config/systemd/user/crawler.{service,timer}`，不依赖 sudo。
+- `scripts/upload_hdfs.sh`：HDFS 验证改为远端 master 执行，上传使用 `-put -f` 支持幂等覆盖。
+- `scripts/setup_pipeline.sh`：自动部署 Hive/Spark/MySQL SQL 和 Spark JDBC 导出脚本到 master。
+- `scripts/export_to_mysql.py`：任一 ADS 表导出失败时返回非 0，避免管线假成功。
+
+### 验证
+```bash
+python3 -m py_compile crawler/*.py scripts/export_to_mysql.py scripts/extract_cookie.py
+bash -n scripts/setup_pipeline.sh scripts/run_pipeline.sh scripts/upload_hdfs.sh scripts/deploy_crawler.sh
+bash scripts/deploy_crawler.sh --env-file scripts/.env
+ssh UbuntuDesktop "bash /home/inkpear/scripts/setup_pipeline.sh"
+ssh UbuntuDesktop "systemctl --user status crawler.timer --no-pager"
+ssh UbuntuDesktop "systemd-analyze --user verify crawler.service crawler.timer"
+```
+
+### 结果
+- WSL user-level `crawler.timer` 已 enabled + active，下一次自动触发为 `2026-06-01 00:00:46 CST`。
+- master 端 `/home/hadoop/sql/*.sql` 与 `/home/hadoop/scripts/export_to_mysql.py` 已部署且 hash 与本地一致。
+- Hive ODS 表与 MySQL ADS 表初始化完成。
+- 当前不再依赖 screen；日志查看方式为 `journalctl --user -u crawler.service -f`。
+
+---
+
+## 2026-05-31 18:10 - 标签词云 MapReduce 接入
+
+### 目标
+修复 B站热门视频 tags 为空导致 `ads_tag_cloud` 无数据的问题，将词云改为基于标题分词的 MapReduce 词频统计。
+
+### 关键调整
+- 新增 `mapreduce/mapper.py`、`mapreduce/reducer.py`、`mapreduce/stopwords.txt`，用于 Hadoop Streaming 标题分词词频统计。
+- mapper 优先使用 `jieba`，节点无 jieba 时自动降级为内置中文 n-gram 分词。
+- 集群 CentOS 7 节点仅有 Python 2.7，因此 mapper/reducer 改为 Python 2/3 双兼容，并用 `python mapper.py` 运行。
+- 新增 `scripts/run_tag_cloud_mr.sh`：从 Spark/Hive `ads_hot_video_rank` 生成标题输入，运行 Hadoop Streaming，写回 Hive `ads_tag_cloud`。
+- `scripts/run_pipeline.sh` 改为 4 步：上传 HDFS → Spark ETL → 标题词云 MapReduce → MySQL 导出。
+- `sql/spark_etl.sql` 中 `ads_tag_cloud` 改为空表占位，由 MapReduce 阶段覆盖写入。
+- `scripts/deploy_crawler.sh` 和 `scripts/setup_pipeline.sh` 同步/部署 `mapreduce/` 到 WSL 和 master。
+- Hadoop Streaming 显式设置 `HADOOP_MAPRED_HOME=/opt/hadoop`，避免 YARN AM 找不到 `MRAppMaster`。
+
+### 验证
+```bash
+python3 -m py_compile mapreduce/mapper.py mapreduce/reducer.py
+bash -n scripts/run_tag_cloud_mr.sh scripts/run_pipeline.sh scripts/setup_pipeline.sh
+bash scripts/deploy_crawler.sh --env-file scripts/.env
+ssh UbuntuDesktop "bash /home/inkpear/scripts/setup_pipeline.sh"
+
+# master 上临时 HDFS 输入执行 Hadoop Streaming smoke test，通过后清理 /tmp/bili_mr_smoke_*
+```
+
+### 结果
+- Hadoop Streaming smoke test 成功，`/tmp/bili_mr_smoke_out/part-*` 输出 `category\ttag\tcount` 格式词频。
+- 词云已纳入 systemd 自动采集后的 `run_pipeline.sh`，无需手工运行。
+
+---
+
+## 2026-05-31 18:20 - 集群 Python3/jieba 依赖安装
+
+### 目标
+为标题词云 MapReduce 安装缺失依赖，使 Hadoop Streaming 能直接使用 `python3 mapper.py` 和 jieba 分词。
+
+### 操作
+在 master、worker1、worker2 三台 CentOS 7 节点以 root 安装：
+```bash
+yum install -y python3 python3-pip
+python3 -m pip install -q jieba
+```
+
+### 验证
+三台节点均通过：
+```bash
+python3 --version        # Python 3.6.8
+pip3 --version           # pip 9.0.3
+python3 -c "import jieba; print(jieba.__version__)"  # 0.42.1
+```
+
+随后将 `scripts/run_tag_cloud_mr.sh` 的 Hadoop Streaming 命令切换为：
+```bash
+-mapper 'python3 mapper.py'
+-reducer 'python3 reducer.py'
+```
+
+### 结果
+- Hadoop Streaming Python3 + jieba smoke test 成功。
+- 示例标题 `原神新角色实机演示伤害爆炸` 输出正常词项：`原神`、`角色`、`实机`、`演示`、`伤害`、`爆炸`，不再退化为 n-gram 噪声词。
+
+---
+
+## 2026-05-31 18:45 - crawler 常驻循环服务切换
+
+### 目标
+取消每日 timer 触发方式，改为进程启动后立即采集，采集和 ETL 完成后休眠 6 小时再自动进入下一轮。采集到足够数据后由人工停止或禁用守护进程。
+
+### 关键操作
+- 停止当前受 SQLite WAL 删除影响的异常 `crawler.service`。
+- 清理 `/home/inkpear/crawler/crawler_state.db*` 与半成品 `/home/inkpear/output/20260531_1737`。
+- 新增 `scripts/crawler_loop.sh`：循环执行 `python3 main.py --once` → `scripts/run_pipeline.sh` → `sleep 21600`。
+- `crawler/crawler.service` 改为 `Type=simple`，`ExecStart=/bin/bash %h/scripts/crawler_loop.sh`，`Restart=always`。
+- `scripts/deploy_crawler.sh` 改为禁用并移除 `crawler.timer`，启用并启动常驻 `crawler.service`。
+
+### 验证
+```bash
+ssh UbuntuDesktop "systemctl --user is-enabled crawler.service"
+ssh UbuntuDesktop "systemctl --user is-active crawler.service"
+ssh UbuntuDesktop "systemctl --user is-enabled crawler.timer 2>/dev/null || true"
+ssh UbuntuDesktop "journalctl --user -u crawler.service -f"
+```
+
+### 结果
+- `crawler.service` enabled + active。
+- `crawler.timer` 已移除，状态为 `not-found/inactive`。
+- 新快照 `20260531_1842` 已开始采集。
+- SQLite `crawler_state.db-wal` 和 `crawler_state.db-shm` 为正常可见文件，不再是 deleted fd。
