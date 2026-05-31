@@ -5,6 +5,7 @@
 import json
 import logging
 import os
+import sys
 import time
 
 import requests
@@ -203,6 +204,7 @@ def process_danmaku_queue(db, snapshot_dir: str, limit: int = None) -> int:
     skip_count = 0
 
     pbar = tqdm(tasks, desc="弹幕队列", unit="个",
+                disable=not sys.stderr.isatty(),
                 postfix={"成功": 0, "失败": 0, "跳过": 0})
     with pbar:
         for qid, bvid, cid in pbar:

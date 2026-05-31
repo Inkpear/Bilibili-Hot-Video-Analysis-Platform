@@ -5,6 +5,7 @@
 import json
 import logging
 import os
+import sys
 import time
 
 from tqdm import tqdm
@@ -111,6 +112,7 @@ def process_comment_queue(db, snapshot_dir: str, limit: int = None) -> int:
     fail_count = 0
 
     pbar = tqdm(tasks, desc="评论队列", unit="个",
+                disable=not sys.stderr.isatty(),
                 postfix={"成功": 0, "失败": 0})
     with pbar:
         for qid, bvid, aid in pbar:

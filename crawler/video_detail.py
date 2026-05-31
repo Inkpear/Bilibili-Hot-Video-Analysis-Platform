@@ -5,6 +5,7 @@
 import json
 import logging
 import os
+import sys
 
 from tqdm import tqdm
 
@@ -75,6 +76,7 @@ def supplement_video_details(bvids: list[str], db, snapshot_dir: str) -> dict[st
     fail_count = 0
 
     pbar = tqdm(bvids, desc="视频详情", unit="个",
+                disable=not sys.stderr.isatty(),
                 postfix={"成功": 0, "失败": 0})
     with pbar:
         for bvid in pbar:

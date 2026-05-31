@@ -6,6 +6,7 @@ UP 主信息采集：WBI 签名 /x/wbi/acc/info。
 import json
 import logging
 import os
+import sys
 
 from tqdm import tqdm
 
@@ -73,6 +74,7 @@ def collect_up_info(up_ids: list[str], db, snapshot_dir: str, limit: int = 50):
     fail_count = 0
 
     pbar = tqdm(up_ids, desc="UP主信息", unit="个",
+                disable=not sys.stderr.isatty(),
                 postfix={"成功": 0, "失败": 0, "跳过": 0})
     with pbar:
         for up_id in pbar:
