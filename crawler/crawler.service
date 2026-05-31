@@ -1,0 +1,14 @@
+[Unit]
+Description=B站热门视频采集
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=inkpear
+WorkingDirectory=/home/inkpear/crawler
+EnvironmentFile=/home/inkpear/crawler/.env
+ExecStart=/usr/bin/python3 /home/inkpear/crawler/main.py --once --max-new 50
+StandardOutput=append:/home/inkpear/crawler/logs/crawler.log
+StandardError=append:/home/inkpear/crawler/logs/crawler_error.log
+TimeoutStopSec=11400

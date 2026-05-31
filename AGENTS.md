@@ -18,7 +18,7 @@ Bilibili-Hot-Video-Analysis-Platform/
 ├── history.md               # 项目全阶段操作留痕（报告素材）
 ├── docs/plan.md             # 完整开发指南（必读）
 ├── api-demo/                # B站 API 调用示例，8 个端点均有可运行 Demo
-├── crawler/                 # 采集脚本（待实现）
+├── crawler/                 # 采集脚本（已完成）
 ├── sql/                     # Hive/Spark/MySQL DDL 和 ETL SQL（待实现）
 ├── backend/src/             # Rust Axum 只读 API（待实现）
 ├── frontend/src/            # React + ECharts 大屏（待实现）
@@ -34,11 +34,11 @@ Bilibili-Hot-Video-Analysis-Platform/
 
 | 项 | 决定 |
 |---|---|
-| 数据来源 | 全站热门 + 10 分区排行 + 每周必看 |
+| 数据来源 | 全站热门 + 9 分区排行 |
 | 采集窗口 | 7 天，每 6 小时 1 次，共 28 快照点 |
 | 评论上限 | 200 条/视频（去重后只采一次） |
 | 弹幕 | 段式 seg.so API，protobuf 自解析，3000 条/视频（去重后只采一次） |
-| 分区 | 动画、番剧、游戏、娱乐、生活、音乐、舞蹈、科技、知识、影视 |
+| 分区 | 动画、游戏、娱乐、生活、音乐、舞蹈、科技、知识、影视 |
 | 输出格式 | NDJSON（每行一个 JSON 对象），含 aid/cid/collect_time/category/snapshot_id |
 | 存储 | ODS/DWD/DWS → Hive；ADS → MySQL（Spark JDBC 导出） |
 | 前端 | React 18 + TypeScript + ECharts |
@@ -133,7 +133,7 @@ virsh net-dhcp-leases hadoop-net
 - [x] `docs/plan.md` 完成
 - [x] `api-demo/` 8 个 B站 API 全部验证通过、Demo 可运行
 - [x] Hadoop/Hive/Spark 环境搭建（Hadoop 3.3.6 + Hive 3.1.3 + Spark 3.5.3 集群已启动）
-- [ ] 采集脚本开发
+- [x] 采集脚本开发 — 番剧(rid=13)/每周必看已移除，9分区+全站热门采集完成
 - [ ] Hive DDL + Spark SQL ETL
 - [ ] MySQL 建表 + 数据导出
 - [ ] Rust 后端 8 个 API 实现
@@ -148,9 +148,8 @@ virsh net-dhcp-leases hadoop-net
 - Hive 快照表按 `snapshot_date`（yyyyMMdd）分区，生命周期按 `snapshot_id` 排序
 - 时间格式统一 `yyyy-MM-dd HH:mm:ss`
 - 视频基础信息按 `bvid` 唯一；快照按 `bvid + snapshot_id + rank_source` 去重
-- 同一视频跨榜单时，ADS 按优先级 canonical：`popular > ranking > weekly`，只保留一条
+- 同一视频跨榜单时，ADS 按优先级 canonical：`popular > ranking`，只保留一条
 - tags 来自 `/x/web-interface/view` 的 `data["tags"]`（列表结构，提取 `tag_name` 拼接），`data["dynamic"]` 不是标签
-- weekly 必看 API 返回的 stat 字段可能不完整，crawler 需对 weekly 视频补充 `/view` 调用获取完整互动数据
 - 前端 TypeScript 类型与 API JSON 一一对应（共享 `docs/plan.md` Section 6.3 定义）
 - 指标口径统一用"样本"限定，不使用"全站"
 - 归一化方法：`LN(x+1)` 后做 min-max，NULLIF 除零保护 + COALESCE 兜底

@@ -46,8 +46,8 @@ B站排行 API (Python requests)
 
 | 参数 | 值 |
 |---|---|
-| 数据源 | 全站热门 + 10 个分区榜 + 每周必看 |
-| 10 个分区 | 动画(1)、番剧(13)、游戏(4)、娱乐(5)、生活(160)、音乐(3)、舞蹈(129)、科技(188)、知识(36)、影视(181) |
+| 数据源 | 全站热门 + 9 个分区榜 |
+| 包含分区 | 动画(1)、游戏(4)、娱乐(5)、生活(160)、音乐(3)、舞蹈(129)、科技(188)、知识(36)、影视(181) |
 | 采集周期 | 7 天 |
 | 快照频率 | 每 6 小时 1 次，共 28 个时间点 |
 | 评论限制 | 每视频 200 条（去重后只采一次） |
@@ -58,7 +58,7 @@ B站排行 API (Python requests)
 | 数据类型 | 采集频率 | 去重键 | 说明 |
 |---|---|---|---|
 | 排行榜快照 | 每 6 小时 | `bvid + snapshot_id + rank_source` | 28 个快照点，每次全量采集 |
-| 视频详情 | 首次 + 变更 | `bvid` | 已采集过的 bvid 不重复请求；weekly 来源必须走 `/view` 补充完整 stat 和 tags |
+| 视频详情 | 首次 + 变更 | `bvid` | 已采集过的 bvid 不重复请求 |
 | UP 主信息 | 首次 + 变更 | `up_id` | 按 up_id 去重 |
 | 评论 | 首次 | `comment_id` | 每个 bvid 最多采集 200 条，只采一次 |
 | 弹幕 | 首次 | `danmaku_id` | 每个 bvid 最多 3000 条，只采一次 |
@@ -73,7 +73,7 @@ B站排行 API (Python requests)
 | 弹幕 | ~1,500,000 行 |
 | ODS 总大小 | ~500MB~2GB |
 
-> 以上为保守下限。实际独立视频数取决于榜单轮换频率：热门和每周必看每轮更新较多，分区榜相对稳定。7 天内可能积累 1000-2000 个独立 bvid。Hadoop 环境需预留足够存储空间。
+> 以上为保守下限。实际独立视频数取决于榜单轮换频率。7 天内可能积累 1000-2000 个独立 bvid。Hadoop 环境需预留足够存储空间。
 
 ### 3.3 统一字段字典
 
@@ -86,7 +86,7 @@ B站排行 API (Python requests)
 | bvid | STRING | `item["bvid"]` | BV 号，主键 |
 | title | STRING | `item["title"]` | 标题 |
 | description | STRING | `/view` 补充 | 简介 |
-| category | STRING | 请求分区或 tname 向上映射 | 十大分区名（动画/游戏/…）；popular/weekly 按 tname 归并，无法归并时为"其他" |
+| category | STRING | 请求分区或 tname 向上映射 | 九大分区名（动画/游戏/…）；popular 按 tname 归并，无法归并时为"其他" |
 | sub_category | STRING | `item["tname"]` | API 返回的子分区名 |
 | tags | STRING | `/view` 补充 | 逗号分隔标签 |
 | duration | INT | `item["duration"]` | 秒 |
@@ -97,7 +97,7 @@ B站排行 API (Python requests)
 | url | STRING | 拼接 | 视频链接 |
 | aid | BIGINT | `item["aid"]` | 评论接口的 oid |
 | cid | BIGINT | `item["cid"]` | 弹幕接口的 oid |
-| rank_source | STRING | 采集时设定 | `popular` / `ranking` / `weekly` |
+| rank_source | STRING | 采集时设定 | `popular` / `ranking` |
 | rank_name | STRING | 采集时设定 | 来源榜单名，如"全站热门"/"游戏榜" |
 
 **视频快照 (dwd_video_snapshot)** — 分区键 `snapshot_date`
@@ -114,7 +114,7 @@ B站排行 API (Python requests)
 | reply_count | BIGINT | `item["stat"]["reply"]` |
 | danmaku_count | BIGINT | `item["stat"]["danmaku"]` |
 | rank_position | INT | 采集时序号 |
-| rank_source | STRING | `popular` / `ranking` / `weekly` |
+| rank_source | STRING | `popular` / `ranking` |
 | rank_name | STRING | 来源榜单名，如"全站热门"/"游戏榜" |
 | snapshot_id | STRING | 快照批次标识，格式 `yyyyMMdd_HHmm`，同一批次所有记录共用 |
 | collect_time | BIGINT | 采集时毫秒级时间戳 |
@@ -251,8 +251,6 @@ HDFS 目录结构：
 | 视频详情 | `GET /x/web-interface/view` | `bvid` | ✅ | [`api-demo/demo_view.py`](../api-demo/demo_view.py) |
 | 评论列表 | `GET /x/v2/reply` | `type=1`, `oid`(aid), `pn`, `ps`, `sort=1` | ✅ | [`api-demo/demo_reply.py`](../api-demo/demo_reply.py) |
 | 弹幕内容 | `GET /x/v2/dm/web/seg.so` | `type=1`, `oid`(cid), `segment_index` | ❌ | [`api-demo/demo_danmaku.py`](../api-demo/demo_danmaku.py) |
-| 每周必看列表 | `GET /x/web-interface/popular/series/list` | — | ❌ | [`api-demo/demo_weekly_list.py`](../api-demo/demo_weekly_list.py) |
-| 每周必看内容 | `GET /x/web-interface/popular/series/one` | `number` | ❌ | [`api-demo/demo_weekly_content.py`](../api-demo/demo_weekly_content.py) |
 | UP主信息 | `GET /x/wbi/acc/info` | `mid`, `w_rid`, `wts` | ✅ + WBI | [`api-demo/demo_up_info.py`](../api-demo/demo_up_info.py) |
 
 > 所有 Demo 脚本自包含，详情见 [`api-demo/README.md`](../api-demo/README.md)。
@@ -263,7 +261,7 @@ HDFS 目录结构：
 - follower_count 需通过 WBI 签名的 UP 主接口 `/x/wbi/acc/info` 获取。
 - 评论的 `oid` 参数是视频的 `aid`（不是 bvid）。
 - 弹幕的 `oid` 参数是视频的 `cid`，使用段式 API，每 6 分钟一段。
-- **分区 `category` 映射规则**：`ranking` 来源直接用 `CATEGORY_NAMES[rid]`（十大分区之一）；`popular` 来源使用 API 返回的 `item["tname"]` 向上归并到十大分区（如"MAD·AMV"→"动画"），无法归并时设为"其他"；`weekly` 来源同 popular。采集时需维护一份 `tname → category` 映射表。
+- **分区 `category` 映射规则**：`ranking` 来源直接用 `CATEGORY_NAMES[rid]`（九大分区之一）；`popular` 来源使用 API 返回的 `item["tname"]` 向上归并到九大分区（如"MAD·AMV"→"动画"），无法归并时设为"其他"。采集时需维护一份 `tname → category` 映射表。
 - **快照批次 `snapshot_id`**：每 6 小时一轮采集开始时生成一个批次标识，格式 `yyyyMMdd_HHmm`（如 `20260601_0000`）。本轮所有 API 请求产生的记录共用同一个 `snapshot_id`。后续 ADS 中"最新快照"统一用 `MAX(snapshot_id)` 而非逐条 `collect_time`。
 
 **Cookie 配置**：
@@ -277,10 +275,10 @@ HEADERS = {
     "Referer": "https://www.bilibili.com",
 }
 COOKIE = os.environ.get("BILI_COOKIE", "")
-DELAY = 1.0
+DELAY = 2.0
 
 CATEGORY_RIDS = {
-    "动画": 1, "番剧": 13, "游戏": 4, "娱乐": 5, "生活": 160,
+    "动画": 1, "游戏": 4, "娱乐": 5, "生活": 160,
     "音乐": 3, "舞蹈": 129, "科技": 188, "知识": 36, "影视": 181,
 }
 CATEGORY_NAMES = {v: k for k, v in CATEGORY_RIDS.items()}
@@ -291,12 +289,12 @@ CATEGORY_NAMES = {v: k for k, v in CATEGORY_RIDS.items()}
 ```
 crawler/
 ├── main.py              # 入口，调度各模块；读取环境变量 BILI_COOKIE
-├── rank_spider.py       # 全站热门 + 分区排行（popular + ranking/v2）+ 每周必看
+├── rank_spider.py       # 全站热门 + 分区排行（popular + ranking/v2）
 ├── video_detail.py      # 视频详情补充字段（description、tags、aid、cid）
 ├── up_info.py           # UP 主粉丝数（WBI 签名）
 ├── comment.py           # 评论（oid=aid，sort=1，每 bvid 最多 200 条）
 ├── danmaku.py           # 弹幕（oid=cid，protobuf 解析，每 bvid 最多 3000 条）
-└── utils.py             # 请求头、限速(≥1s)、重试、WBI 签名、protobuf 解析
+└── utils.py             # 请求头、限速(≥2s)、重试、WBI 签名、protobuf 解析
 ```
 
 **采集输出格式**：每个采集批次一个目录，所有文件均为 NDJSON（每行一个 JSON 对象）。
@@ -571,7 +569,6 @@ FROM (
             ORDER BY CASE rank_source
                 WHEN 'popular' THEN 1
                 WHEN 'ranking' THEN 2
-                WHEN 'weekly'  THEN 3
                 ELSE 9
             END,
             CASE WHEN category != '其他' AND category IS NOT NULL THEN 0 ELSE 1 END,
@@ -704,7 +701,6 @@ WITH canonical AS (
                 ORDER BY CASE rank_source
                     WHEN 'popular' THEN 1
                     WHEN 'ranking' THEN 2
-                    WHEN 'weekly'  THEN 3
                     ELSE 9
                 END
             ) AS rn
@@ -790,7 +786,6 @@ WITH canonical AS (
                 ORDER BY CASE rank_source
                     WHEN 'popular' THEN 1
                     WHEN 'ranking' THEN 2
-                    WHEN 'weekly'  THEN 3
                     ELSE 9
                 END
             ) AS rn
@@ -826,7 +821,6 @@ WITH canonical AS (
                 ORDER BY CASE rank_source
                     WHEN 'popular' THEN 1
                     WHEN 'ranking' THEN 2
-                    WHEN 'weekly'  THEN 3
                     ELSE 9
                 END
             ) AS rn
@@ -860,7 +854,6 @@ WITH latest AS (
                 ORDER BY CASE rank_source
                     WHEN 'popular' THEN 1
                     WHEN 'ranking' THEN 2
-                    WHEN 'weekly'  THEN 3
                     ELSE 9
                 END
             ) AS rn
@@ -925,7 +918,6 @@ WITH canonical AS (
                 ORDER BY CASE rank_source
                     WHEN 'popular' THEN 1
                     WHEN 'ranking' THEN 2
-                    WHEN 'weekly'  THEN 3
                     ELSE 9
                 END
             ) AS rn
@@ -1256,7 +1248,7 @@ tower-http = { version = "0.5", features = ["cors"] }
 | 字段 | 类型 | 说明 |
 |---|---|---|
 | video_count | int | 最新快照中的视频数 |
-| category_count | int | 涉及分区数（通常 ≤10，若存在"其他"分区则可能为 11） |
+| category_count | int | 涉及分区数（通常 ≤9，若存在"其他"分区则可能为 10） |
 | up_count | int | 涉及 UP 主数 |
 | total_views | int | 样本累计播放量 |
 | total_interactions | int | 点赞+投币+收藏+评论+分享总和 |
@@ -1421,7 +1413,7 @@ tower-http = { version = "0.5", features = ["cors"] }
 | view_count | int | 该时间点播放量 |
 | like_count | int | 该时间点点赞数 |
 | rank_position | int | 排名 |
-| rank_source | string | 来源榜单：popular/ranking/weekly |
+| rank_source | string | 来源榜单：popular/ranking |
 | rank_name | string | 来源榜单名 |
 | view_growth | int | 较上一时间点播放增量（首个点为 0） |
 | rank_change | int | 较上一时间点排名变化（正=上升，首个点为 0） |
