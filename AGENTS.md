@@ -19,10 +19,16 @@ Bilibili-Hot-Video-Analysis-Platform/
 ├── docs/plan.md             # 完整开发指南（必读）
 ├── api-demo/                # B站 API 调用示例，8 个端点均有可运行 Demo
 ├── crawler/                 # 采集脚本（已完成）
-├── sql/                     # Hive/Spark/MySQL DDL 和 ETL SQL（待实现）
+├── sql/                     # Hive/Spark/MySQL DDL 和 ETL SQL（已完成）
 ├── backend/src/             # Rust Axum 只读 API（待实现）
 ├── frontend/src/            # React + ECharts 大屏（待实现）
 ├── scripts/
+│   ├── deploy_crawler.sh    # 一键部署 crawler 到 WSL
+│   ├── extract_cookie.py    # 从浏览器提取 Cookie
+│   ├── upload_hdfs.sh       # NDJSON → HDFS
+│   ├── export_to_mysql.py   # Spark JDBC → MySQL
+│   ├── run_pipeline.sh      # 日常 ETL 管线
+│   ├── setup_pipeline.sh    # 首次初始化管线
 │   └── qemu/                # QEMU/libvirt 虚拟机管理脚本
 ├── mapreduce/               # MapReduce 作业（标题词频统计）
 ├── output/                  # 采集数据
@@ -134,8 +140,8 @@ virsh net-dhcp-leases hadoop-net
 - [x] `api-demo/` 6 个 B站 API 验证通过、Demo 可运行
 - [x] Hadoop/Hive/Spark 环境搭建（Hadoop 3.3.6 + Hive 3.1.3 + Spark 3.5.3 集群已启动）
 - [x] 采集脚本开发 — 事务模型：日结模式，每视频按 /view→UP→评论→弹幕 全量采集，fail_count≥3 永久放弃
-- [ ] Hive DDL + Spark SQL ETL
-- [ ] MySQL 建表 + 数据导出
+- [x] Hive DDL + Spark SQL ETL — ODS/DWD/DWS/ADS 全链路 SQL，已部署到集群
+- [x] MySQL 建表 + 数据导出 — 7 张 ADS 表，Spark JDBC 导出脚本
 - [ ] Rust 后端 8 个 API 实现
 - [ ] React 前端大屏开发
 - [ ] 课程报告 + PPT
@@ -156,3 +162,5 @@ virsh net-dhcp-leases hadoop-net
 - `rank_change` 正数=排名上升（数值变小）
 - 资源不存在统一返回 `code=0, data=null`，不使用 404
 - Cookie 不硬编码，使用环境变量 `BILI_COOKIE`
+- Cookie 含分号时不能用 `export $(grep ... | xargs)` 提取（bash 会将 `;` 解析为命令分隔符），必须用 `grep -o | sed` 提取原始值
+- 采集部署在 WSL，通过 `screen -S crawler` 前台监控或 systemd timer 自动触发

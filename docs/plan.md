@@ -294,14 +294,14 @@ CATEGORY_NAMES = {v: k for k, v in CATEGORY_RIDS.items()}
 
 ```
 crawler/
-├── main.py              # 入口，调度各模块；per-video 事务编排
+├── main.py              # 入口，per-video 事务编排
 ├── rank_spider.py       # 全站热门 + 分区排行（popular + ranking/v2）
 ├── video_detail.py      # 视频详情补充字段（description、tags、aid、cid）
 ├── up_info.py           # UP 主粉丝数（WBI 签名）
 ├── comment.py           # 评论（oid=aid，sort=1，每 bvid 最多 200 条）
 ├── danmaku.py           # 弹幕（oid=cid，protobuf 解析，每 bvid 最多 3000 条）
 ├── db.py                # SQLite 状态管理：去重/失败追踪/快照日志
-├── config.py            # 全局配置
+├── config.py            # 全局配置：Cookie/DELAY/分区映射
 └── utils.py             # 请求头、限速(≥2s)、重试、WBI 签名、protobuf 解析
 ```
 
@@ -1029,24 +1029,29 @@ SELECT bvid, COUNT(*) FROM ads_video_lifecycle GROUP BY bvid;
 
 ### Stage 6: Export to MySQL
 
-**目标**：将 ADS 结果同步到 MySQL。推荐使用 Spark JDBC。
+**目标**：将 ADS 结果同步到 MySQL。使用 PySpark JDBC。
 
 ```bash
-# Spark JDBC 导出（推荐）
-spark-submit --class com.example.ExportToMysql \
-  --jars mysql-connector-j-8.x.jar \
-  export.jar
+# 自动管线（部署在 WSL，crawler 完成后触发）
+bash scripts/run_pipeline.sh
+
+# 或手动执行各步骤:
+# Step 1: 上传 NDJSON 到 HDFS
+bash scripts/upload_hdfs.sh
+
+# Step 2: Spark SQL ETL（在 master 上运行）
+ssh hadoop@master spark-sql --master spark://master:7077 -f /home/hadoop/sql/spark_etl.sql
+
+# Step 3: Spark JDBC 导出到 MySQL
+ssh hadoop@master spark-submit --jars /opt/spark/jars/mysql-connector-j-8.0.33.jar \
+    --master spark://master:7077 \
+    /home/hadoop/scripts/export_to_mysql.py
+
+# 首次初始化（只需一次）
+bash scripts/setup_pipeline.sh
 ```
 
-或使用 Python 脚本：
-
-```python
-# scripts/export_to_mysql.py
-# 使用 pandas + sqlalchemy 从 Hive/Spark 结果导入 MySQL
-# 先 TRUNCATE 目标表，再 INSERT，保证幂等
-```
-
-**MySQL 建表（完整，与 API 响应字段一一对应）**：
+**MySQL 建表**（`sql/mysql_ads_ddl.sql`，与 API 响应字段一一对应）：
 
 ```sql
 CREATE DATABASE IF NOT EXISTS bilibili DEFAULT CHARSET utf8mb4;
@@ -2152,15 +2157,16 @@ cd frontend && npm run dev
 ## 8. Deliverables
 
 | 产出 | 内容 | 目录/文件 |
-|---|---|---|
+|---|---|---|---|
 | 采集脚本 | Python 爬虫，NDJSON 输出，含 WBI 签名、protobuf 解析 | `crawler/` |
-| 采集数据示例 | 1 个批次的 NDJSON 输出示例 | `output/sample/` |
+| 采集数据示例 | 采集输出的 NDJSON 格式示例 | `output/` |
 | HDFS 上传脚本 | 批量上传 ODS 数据的 shell 脚本 | `scripts/upload_hdfs.sh` |
-| Hive DDL | ODS 外部表 + DWD/DWS 管理表建表语句 | `sql/hive_ddl.sql` |
-| Spark SQL ETL | DWD 清洗 + DWS/ADS 分析 SQL 脚本 | `sql/analysis.sql` |
+| Hive DDL | ODS 外部表建表语句 | `sql/hive_ods_ddl.sql` |
+| Spark SQL ETL | DWD 清洗 + DWS/ADS 分析 SQL 脚本 | `sql/spark_etl.sql` |
 | MapReduce 作业 | 标题词频统计 | `mapreduce/` |
-| MySQL DDL | ADS 表建表语句 | `sql/mysql_ddl.sql` |
-| 数据导出脚本 | Spark JDBC / Python 导出脚本 | `scripts/export_to_mysql.sh` |
+| MySQL DDL | ADS 表建表语句 | `sql/mysql_ads_ddl.sql` |
+| 数据导出脚本 | PySpark JDBC 导出脚本 | `scripts/export_to_mysql.py` |
+| 管线脚本 | 日常 ETL 编排 + 首次初始化 | `scripts/run_pipeline.sh` / `scripts/setup_pipeline.sh` |
 | 后端代码 | Rust Axum 项目，8 个只读 API 端点 | `backend/` |
 | 前端代码 | React + ECharts 大屏项目 | `frontend/` |
 | 测试脚本 | API 端点验证脚本 | `scripts/test_api.sh` |
