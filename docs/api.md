@@ -11,17 +11,18 @@
 ## 目录
 
 1. [通用约定](#1-通用约定)
-2. [端点列表](#2-端点列表)
-3. [/api/overview](#3-apioverview)
-4. [/api/hot-videos](#4-apihot-videos)
-5. [/api/partition-compare](#5-apipartition-compare)
-6. [/api/lifecycle](#6-apilifecycle)
-7. [/api/lifecycle/top](#7-apilifecycletop)
-8. [/api/partition-detail](#8-apipartition-detail)
-9. [/api/tag-cloud](#9-apitag-cloud)
-10. [/api/interaction](#10-apiinteraction)
-11. [错误码与状态码](#11-错误码与状态码)
-12. [TypeScript 类型定义](#12-typescript-类型定义)
+2. [鉴权](#2-鉴权)
+3. [端点列表](#3-端点列表)
+4. [/api/overview](#4-apioverview)
+5. [/api/hot-videos](#5-apihot-videos)
+6. [/api/partition-compare](#6-apipartition-compare)
+7. [/api/lifecycle](#7-apilifecycle)
+8. [/api/lifecycle/top](#8-apilifecycletop)
+9. [/api/partition-detail](#9-apipartition-detail)
+10. [/api/tag-cloud](#10-apitag-cloud)
+11. [/api/interaction](#11-apiinteraction)
+12. [错误码与状态码](#12-错误码与状态码)
+13. [TypeScript 类型定义](#13-typescript-类型定义)
 
 ---
 
@@ -72,7 +73,88 @@
 
 ---
 
-## 2. 端点列表
+## 2. 鉴权
+
+API 支持基于 Token 的鉴权。当配置了 `API_TOKEN` 环境变量时，所有 `/api/*` 请求必须携带有效的 Token。
+
+### 配置方式
+
+**环境变量**（推荐）:
+
+```bash
+export API_TOKEN=your_secret_token_here
+```
+
+**`.env` 文件**:
+
+```env
+API_TOKEN=your_secret_token_here
+```
+
+**配置优先级**:
+
+1. 环境变量 `API_TOKEN`
+2. `.env` 文件中的 `API_TOKEN`
+3. 默认值（空字符串，鉴权禁用）
+
+### 请求方式
+
+在请求头中添加 `Authorization: Bearer <token>`:
+
+```bash
+curl -H "Authorization: Bearer your_secret_token_here" http://localhost:3000/api/overview
+```
+
+### 鉴权行为
+
+| 场景 | 行为 |
+|---|---|
+| `API_TOKEN` 未配置或为空 | 鉴权禁用，所有请求直接通过 |
+| `API_TOKEN` 已配置 | 必须携带有效 Token |
+| 缺少 `Authorization` 头 | 返回 HTTP `401` |
+| Token 格式错误（非 Bearer） | 返回 HTTP `401` |
+| Token 不匹配 | 返回 HTTP `401` |
+| Token 正常 | 正常处理请求 |
+
+### 错误响应
+
+**缺少 Authorization 头**:
+
+```json
+{
+  "code": 401,
+  "message": "missing or invalid Authorization header, expected: Bearer <token>",
+  "data": null
+}
+```
+
+**Token 不匹配**:
+
+```json
+{
+  "code": 401,
+  "message": "invalid token",
+  "data": null
+}
+```
+
+### 示例
+
+```bash
+# 无 token（鉴权禁用时可访问）
+curl http://localhost:3000/api/overview
+
+# 带 token
+curl -H "Authorization: Bearer my_secret_token" http://localhost:3000/api/overview
+
+# 错误 token
+curl -H "Authorization: Bearer wrong_token" http://localhost:3000/api/overview
+# → HTTP 401
+```
+
+---
+
+## 3. 端点列表
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
@@ -688,7 +770,7 @@ GET /api/interaction?bvid=BV16YGC6XEco
 
 ---
 
-## 11. 错误码与状态码
+## 12. 错误码与状态码
 
 ### HTTP 状态码映射
 
@@ -729,7 +811,7 @@ GET /api/interaction?bvid=BV16YGC6XEco
 
 ---
 
-## 12. TypeScript 类型定义
+## 13. TypeScript 类型定义
 
 > 以下类型与 API JSON 一一对应，前端可直接用于 `types/index.ts`。
 

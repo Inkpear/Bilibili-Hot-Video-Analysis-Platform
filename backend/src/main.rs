@@ -1,6 +1,8 @@
 use axum::Router;
 use tower_http::cors::CorsLayer;
 
+mod auth;
+mod config;
 mod db;
 mod error;
 mod handlers;
@@ -17,11 +19,19 @@ async fn main() {
         )
         .init();
 
+    let cfg = config::AppConfig::load();
+
+    if cfg.auth_enabled() {
+        tracing::info!("auth enabled, token required");
+    } else {
+        tracing::warn!("auth disabled, no API_TOKEN configured");
+    }
+
     let pool = db::create_pool()
         .await
         .expect("failed to create database pool");
 
-    let app = Router::new()
+    let api_routes = Router::new()
         .route("/api/overview", axum::routing::get(handlers::overview))
         .route("/api/hot-videos", axum::routing::get(handlers::hot_videos))
         .route(
@@ -41,11 +51,18 @@ async fn main() {
         .route(
             "/api/interaction",
             axum::routing::get(handlers::interaction),
-        )
+        );
+
+    let app = Router::new()
+        .merge(api_routes)
+        .layer(axum::middleware::from_fn_with_state(
+            cfg.clone(),
+            auth::auth_middleware,
+        ))
         .layer(CorsLayer::permissive())
         .with_state(pool);
 
-    let bind = "0.0.0.0:3000";
+    let bind = &cfg.bind;
     tracing::info!("listening on {}", bind);
 
     let listener = tokio::net::TcpListener::bind(bind).await.unwrap();
