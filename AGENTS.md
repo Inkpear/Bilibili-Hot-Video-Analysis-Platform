@@ -20,7 +20,7 @@ Bilibili-Hot-Video-Analysis-Platform/
 ├── api-demo/                # B站 API 调用示例，8 个端点均有可运行 Demo
 ├── crawler/                 # 采集脚本（已完成）
 ├── sql/                     # Hive/Spark/MySQL DDL 和 ETL SQL（已完成）
-├── backend/src/             # Rust Axum 只读 API（待实现）
+├── backend/src/             # Rust Axum 只读 API（已完成）
 ├── frontend/src/            # React + ECharts 大屏（待实现）
 ├── scripts/
 │   ├── deploy_crawler.sh    # 一键部署 crawler 到 WSL
