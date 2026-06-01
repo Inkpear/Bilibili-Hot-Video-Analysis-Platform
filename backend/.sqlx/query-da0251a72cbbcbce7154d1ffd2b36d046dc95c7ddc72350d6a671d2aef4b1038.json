@@ -1,0 +1,134 @@
+{
+  "db_name": "MySQL",
+  "query": "SELECT\n                    bvid, title, category, up_name,\n                    view_count, like_count, coin_count, favorite_count,\n                    reply_count, share_count, rank_position, heat_score\n                FROM ads_hot_video_rank\n                ORDER BY heat_score DESC\n                LIMIT ? OFFSET ?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "bvid",
+        "type_info": {
+          "type": "VarString",
+          "flags": "NOT_NULL | PRIMARY_KEY | NO_DEFAULT_VALUE",
+          "max_size": 128
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "title",
+        "type_info": {
+          "type": "VarString",
+          "flags": "",
+          "max_size": 2048
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "category",
+        "type_info": {
+          "type": "VarString",
+          "flags": "",
+          "max_size": 256
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "up_name",
+        "type_info": {
+          "type": "VarString",
+          "flags": "",
+          "max_size": 512
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "view_count",
+        "type_info": {
+          "type": "LongLong",
+          "flags": "",
+          "max_size": 20
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "like_count",
+        "type_info": {
+          "type": "LongLong",
+          "flags": "",
+          "max_size": 20
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "coin_count",
+        "type_info": {
+          "type": "LongLong",
+          "flags": "",
+          "max_size": 20
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "favorite_count",
+        "type_info": {
+          "type": "LongLong",
+          "flags": "",
+          "max_size": 20
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "reply_count",
+        "type_info": {
+          "type": "LongLong",
+          "flags": "",
+          "max_size": 20
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "share_count",
+        "type_info": {
+          "type": "LongLong",
+          "flags": "",
+          "max_size": 20
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "rank_position",
+        "type_info": {
+          "type": "Long",
+          "flags": "",
+          "max_size": 11
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "heat_score",
+        "type_info": {
+          "type": "Double",
+          "flags": "",
+          "max_size": 22
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "da0251a72cbbcbce7154d1ffd2b36d046dc95c7ddc72350d6a671d2aef4b1038"
+}

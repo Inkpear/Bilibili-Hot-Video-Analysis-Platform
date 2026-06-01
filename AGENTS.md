@@ -20,7 +20,7 @@ Bilibili-Hot-Video-Analysis-Platform/
 ├── api-demo/                # B站 API 调用示例，8 个端点均有可运行 Demo
 ├── crawler/                 # 采集脚本（已完成）
 ├── sql/                     # Hive/Spark/MySQL DDL 和 ETL SQL（已完成）
-├── backend/src/             # Rust Axum 只读 API（待实现）
+├── backend/src/             # Rust Axum 只读 API（已完成）
 ├── frontend/src/            # React + ECharts 大屏（待实现）
 ├── scripts/
 │   ├── deploy_crawler.sh    # 一键部署 crawler 到 WSL
@@ -122,6 +122,31 @@ virsh net-dhcp-leases hadoop-net
 
 **详细搭建记录**：`history.md`
 
+**后端 (Rust Axum)**：
+```bash
+cd backend
+cargo run                    # 启动服务，监听 0.0.0.0:3000
+cargo check                  # 编译检查（sqlx 宏校验 SQL）
+cargo fmt                    # 格式化代码
+```
+
+**后端环境要求**：
+- 本机需通过端口转发访问 MySQL：将 `127.0.0.1:3306` 转发到 `192.168.100.10:3306`
+- `.env` 文件已配置 `DATABASE_URL=mysql://hive:Hive@123456@127.0.0.1:3306/bilibili`
+- `sqlx` 宏要求编译时数据库可达，`cargo check` 会连接数据库校验 SQL
+
+**后端验证**：
+```bash
+curl http://localhost:3000/api/overview
+curl "http://localhost:3000/api/hot-videos?sort=heat&limit=10"
+curl http://localhost:3000/api/partition-compare
+curl "http://localhost:3000/api/lifecycle?bvid=BVxxx"
+curl "http://localhost:3000/api/lifecycle/top?limit=5"
+curl "http://localhost:3000/api/partition-detail?category=游戏"
+curl "http://localhost:3000/api/tag-cloud"
+curl "http://localhost:3000/api/interaction?bvid=BVxxx"
+```
+
 ## API Contract
 
 8 个只读端点，统一响应 `{"code":0,"message":"ok","data":{...}}`：
@@ -149,7 +174,7 @@ virsh net-dhcp-leases hadoop-net
 - [x] MySQL 建表 + 数据导出 — 7 张 ADS 表，Spark JDBC 导出脚本
 - [x] MapReduce 标题词云 — Hadoop Streaming + Python3/jieba，已接入日常管线
 - [x] 数据管线全链路验证 — P10 问题已解决，7 张 ADS 表全部导出 MySQL 成功
-- [ ] Rust 后端 8 个 API 实现
+- [x] Rust 后端 8 个 API 实现 — Axum + sqlx 宏编译期校验，8 个 GET 端点已验证
 - [ ] React 前端大屏开发
 - [ ] 课程报告 + PPT
 

@@ -261,7 +261,7 @@ top_videos AS (
     JOIN latest_collect lc ON s.snapshot_id = lc.max_sid
     WHERE s.rank_source = 'popular'
     ORDER BY s.view_count DESC
-    LIMIT 20
+    LIMIT 100
 )
 SELECT
     s.bvid,

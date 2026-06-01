@@ -915,3 +915,98 @@ mysql -u hive -pHive@123456 -e "SELECT category, COUNT(*) FROM ads_tag_cloud GRO
 - 7 张 ADS 表全部成功导出 MySQL
 - 数据管线全链路验证通过
 - systemd 服务正常运行
+
+---
+
+## 2026-06-01 12:20 - Rust Axum 后端 API 实现
+
+### 目标
+实现 Rust Axum 只读后端 API，提供 8 个 GET 端点，使用 `sqlx` 宏保障编译期 SQL 检查。
+
+### 工程结构
+```text
+backend/
+├── Cargo.toml
+├── .env                          # DATABASE_URL=mysql://hive:Hive@123456@127.0.0.1:3306/bilibili
+└── src/
+    ├── main.rs                   # Axum 启动、路由注册、CORS
+    ├── db.rs                     # MySQL 连接池
+    ├── models.rs                 # API DTO、Row struct、Query 参数
+    ├── handlers.rs               # 8 个 API handler（sqlx 宏）
+    └── error.rs                  # 统一错误处理（400/500）
+```
+
+### 依赖
+- axum 0.7
+- tokio 1 (macros, rt-multi-thread, net)
+- serde 1 + serde_json 1
+- sqlx 0.8 (mysql, runtime-tokio-rustls, chrono)
+- tower-http 0.6 (cors, trace)
+- tracing 0.1 + tracing-subscriber 0.3
+- dotenvy 0.15
+- chrono 0.4
+
+### 关键设计决策
+
+**sqlx 宏编译期校验**：
+- 使用 `sqlx::query_as!` 宏，SQL 在编译时连接数据库校验表结构和字段类型
+- 要求 `DATABASE_URL` 在编译时可达（通过 `.env` 文件或环境变量）
+- 不使用动态 SQL 拼接，避免 SQL 注入风险
+
+**动态排序处理**：
+- `/api/hot-videos?sort=...` 使用 `match sort` 分成 4 个静态 SQL 分支
+- 每个分支的 SQL 字符串是字面量，满足 sqlx 宏要求
+- 排序字段白名单校验，非法值返回 400
+
+**MySQL NULL 处理**：
+- MySQL ADS 表列默认可空，sqlx 推断为 `Option<T>`
+- Row struct 使用 `Option<T>` 接收
+- 映射到 API DTO 时通过 `unwrap_or(default)` 提供默认值
+
+**HTTP 状态码**：
+- 成功：`200 OK` + `code=0`
+- 参数错误：`400 Bad Request` + `code=400`
+- 数据库错误：`500 Internal Server Error` + `code=500`
+- 资源不存在：`200 OK` + `code=0, data=null`
+
+### 端口转发
+本机需将 `127.0.0.1:3306` 转发到 Hadoop master `192.168.100.10:3306`，供 sqlx 宏编译期校验和运行时连接。
+
+### 验证结果
+
+**编译验证**：
+```bash
+cargo fmt     # 格式化通过
+cargo check   # 编译通过（1 个 dead_code warning，保留 internal 函数备用）
+```
+
+**8 个端点 curl 验证**：
+
+| 端点 | 状态 | 数据 |
+|---|---|---|
+| `/api/overview` | ✅ | video_count=954, category_count=10, up_count=935 |
+| `/api/hot-videos?sort=heat&limit=3` | ✅ | total=100, 3 条视频含 heat_score |
+| `/api/partition-compare` | ✅ | 10 个分区，含 avg_like_rate 等指标 |
+| `/api/lifecycle?bvid=BV16YGC6XEco` | ✅ | 2 个时间点，view_growth 和 rank_change 正确 |
+| `/api/lifecycle/top?limit=2` | ✅ | 2 个视频含 timeline |
+| `/api/partition-detail?category=游戏` | ✅ | 10 个视频 + 10 个 UP 主 |
+| `/api/tag-cloud` | ✅ | 36 个标签（全站） |
+| `/api/tag-cloud?category=游戏` | ✅ | 2 个标签 |
+| `/api/interaction?bvid=BV16YGC6XEco` | ✅ | 含 5 个互动率指标 |
+
+**参数错误验证**：
+```bash
+GET /api/hot-videos?sort=invalid   → 400, "invalid sort, allowed values: heat, views, likes, coins"
+GET /api/lifecycle                 → 400, "bvid is required"
+GET /api/partition-detail          → 400, "category is required"
+```
+
+**HTTP 状态码验证**：
+```bash
+参数错误 → HTTP 400
+资源不存在 → HTTP 200 + data=null
+成功 → HTTP 200 + data={...}
+```
+
+### 分支
+`backend/axum-api`（从 main 新建）
