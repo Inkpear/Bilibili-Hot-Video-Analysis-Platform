@@ -1,6 +1,8 @@
 # B站热门视频分析平台 — 后端 API 文档
 
-> Base URL: `http://localhost:3000`
+> 本地地址: `http://localhost:9090`
+>
+> 公网地址: `http://111.228.34.34:9091`（通过 FRP 穿透）
 >
 > 技术栈: Rust Axum + sqlx (MySQL)
 >
@@ -957,43 +959,75 @@ export interface InteractionData {
 
 ### 启动服务
 
+**本地开发**:
+
 ```bash
 cd backend
 cargo run
-# listening on 0.0.0.0:3000
+# listening on 0.0.0.0:9090
+```
+
+**WSL 部署**:
+
+```bash
+ssh UbuntuDesktop
+cd ~/backend
+./bilibili-hot-backend &
 ```
 
 ### 环境变量
 
 | 变量 | 默认值 | 说明 |
 |---|---|---|
-| `DATABASE_URL` | `mysql://hive:Hive@123456@127.0.0.1:3306/bilibili` | MySQL 连接串 |
+| `DATABASE_URL` | `mysql://hive:Hive@123456@192.168.100.10:3306/bilibili` | MySQL 连接串 |
+| `BIND` | `0.0.0.0:9090` | 监听地址和端口 |
+| `API_TOKEN` | 空（鉴权禁用） | API 鉴权 Token |
+
+### FRP 穿透（公网访问）
+
+架构：
+```
+公网用户 → 111.228.34.34:9091 → frps:7001 → frpc → WSL:9090 → MySQL
+```
+
+**WSL (frpc)**:
+```bash
+cd ~/backend
+./frpc -c frpc.toml &
+```
+
+**云服务器 (frps)**:
+```bash
+frps -c /etc/frp/frps.toml &
+```
+
+Dashboard: `http://111.228.34.34:7500`（admin / da6d9087cd0ca58b）
 
 ### 快速验证
 
 ```bash
-# 总览
-curl http://localhost:3000/api/overview
+# 公网访问
+curl http://111.228.34.34:9091/api/overview
 
 # 热门视频
-curl "http://localhost:3000/api/hot-videos?sort=heat&limit=5"
+curl "http://111.228.34.34:9091/api/hot-videos?sort=heat&limit=5"
 
 # 分区对比
-curl http://localhost:3000/api/partition-compare
+curl http://111.228.34.34:9091/api/partition-compare
 
 # 生命周期
-curl "http://localhost:3000/api/lifecycle?bvid=BV16YGC6XEco"
+curl "http://111.228.34.34:9091/api/lifecycle?bvid=BV16YGC6XEco"
 
 # TOP N 生命周期
-curl "http://localhost:3000/api/lifecycle/top?limit=3"
+curl "http://111.228.34.34:9091/api/lifecycle/top?limit=3"
 
 # 分区下钻
-curl "http://localhost:3000/api/partition-detail?category=游戏"
+curl "http://111.228.34.34:9091/api/partition-detail?category=游戏"
 
 # 标签词云
-curl http://localhost:3000/api/tag-cloud
-curl "http://localhost:3000/api/tag-cloud?category=游戏"
+curl http://111.228.34.34:9091/api/tag-cloud
+curl "http://111.228.34.34:9091/api/tag-cloud?category=游戏"
 
 # 互动质量
-curl "http://localhost:3000/api/interaction?bvid=BV16YGC6XEco"
+curl "http://111.228.34.34:9091/api/interaction?bvid=BV16YGC6XEco"
 ```
