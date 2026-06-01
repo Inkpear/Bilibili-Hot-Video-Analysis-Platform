@@ -1,0 +1,104 @@
+{
+  "db_name": "MySQL",
+  "query": "SELECT\n            category,\n            hot_video_count,\n            avg_views,\n            avg_like_rate,\n            avg_coin_rate,\n            avg_fav_rate,\n            top_view_count,\n            total_views,\n            up_count\n        FROM ads_partition_compare\n        ORDER BY total_views DESC",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "category",
+        "type_info": {
+          "type": "VarString",
+          "flags": "NOT_NULL | PRIMARY_KEY | NO_DEFAULT_VALUE",
+          "max_size": 256
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "hot_video_count",
+        "type_info": {
+          "type": "Long",
+          "flags": "",
+          "max_size": 11
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "avg_views",
+        "type_info": {
+          "type": "LongLong",
+          "flags": "",
+          "max_size": 20
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "avg_like_rate",
+        "type_info": {
+          "type": "Double",
+          "flags": "",
+          "max_size": 22
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "avg_coin_rate",
+        "type_info": {
+          "type": "Double",
+          "flags": "",
+          "max_size": 22
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "avg_fav_rate",
+        "type_info": {
+          "type": "Double",
+          "flags": "",
+          "max_size": 22
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "top_view_count",
+        "type_info": {
+          "type": "LongLong",
+          "flags": "",
+          "max_size": 20
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "total_views",
+        "type_info": {
+          "type": "LongLong",
+          "flags": "",
+          "max_size": 20
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "up_count",
+        "type_info": {
+          "type": "Long",
+          "flags": "",
+          "max_size": 11
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "9df37f3f2516f2ae28e229c49209a04d0695a9427f918223272a4296594d0ee4"
+}

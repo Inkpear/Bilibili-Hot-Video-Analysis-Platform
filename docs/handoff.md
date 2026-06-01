@@ -1,19 +1,19 @@
 # 项目交接文档
 
-更新时间：2026-05-31
+更新时间：2026-06-01
 
 ## 当前阶段
 
-当前分支：`crawler/core`
+当前分支：`backend/axum-api`
 
 本阶段已完成：
 - Python 爬虫事务模型：全站热门 + 9 分区排行，每视频按详情、UP、评论、弹幕采集。
 - HDFS / Hive ODS / Spark DWD-DWS-ADS / MySQL ADS 全链路脚本。
 - Hadoop Streaming 标题词云：`mapreduce/mapper.py` + `reducer.py` + `jieba`。
 - WSL user-level systemd 常驻采集服务：启动即采集，采完跑 ETL，休眠 6 小时再采。
+- Rust Axum 后端 8 个只读 API：`sqlx` 宏编译期校验，HTTP 标准状态码。
 
 尚未完成：
-- Rust Axum 后端 8 个 API。
 - React + ECharts 前端大屏。
 - 课程报告和答辩 PPT。
 
@@ -118,22 +118,48 @@ sshpass -p hadoop123 ssh hadoop@192.168.100.10 \
   'spark-sql --master spark://master:7077 -e "USE bilibili; SHOW TABLES;"'
 ```
 
-## 下一阶段建议
+## 后端 API (Rust Axum)
 
-可以立即开始 Rust Axum 后端骨架：
-- 建立 `backend/Cargo.toml` 和 `backend/src/*`。
-- 实现 MySQL 连接池。
-- 实现统一响应结构 `ApiResponse<T>`。
-- 注册 8 个 GET 端点。
-- 先兼容空表返回，再等第一轮 ETL 完成后联调真实数据。
-
-真实数据联调建议等待：
+工程结构：
 ```text
-journalctl --user -u crawler.service -f
-出现：
-[crawler-loop] ETL 完成
-[crawler-loop] 休眠 21600s
+backend/
+├── Cargo.toml
+├── .env                          # DATABASE_URL 配置
+└── src/
+    ├── main.rs                   # Axum 启动、路由注册、CORS
+    ├── db.rs                     # MySQL 连接池
+    ├── models.rs                 # API DTO、Row struct、Query 参数
+    ├── handlers.rs               # 8 个 API handler（sqlx 宏）
+    └── error.rs                  # 统一错误处理（400/500）
 ```
+
+启动：
+```bash
+cd backend
+cargo run                         # 监听 0.0.0.0:3000
+```
+
+环境要求：
+- 本机需将 `127.0.0.1:3306` 转发到 Hadoop master `192.168.100.10:3306`
+- `sqlx` 宏在 `cargo check` 时连接数据库校验 SQL，编译期必须可达
+
+8 个端点：
+| 端点 | 说明 |
+|---|---|
+| `GET /api/overview` | 大屏总览 |
+| `GET /api/hot-videos?sort=heat&limit=20&offset=0` | 热门排行 |
+| `GET /api/partition-compare` | 分区竞争力 |
+| `GET /api/lifecycle?bvid=BVxxx` | 单视频生命周期 |
+| `GET /api/lifecycle/top?limit=5` | TOP N 生命周期 |
+| `GET /api/partition-detail?category=游戏` | 分区下钻 |
+| `GET /api/tag-cloud?category=游戏` | 标签词云 |
+| `GET /api/interaction?bvid=BVxxx` | 互动质量 |
+
+HTTP 状态码：
+- 成功：`200` + `code=0`
+- 参数错误：`400` + `code=400`
+- 数据库错误：`500` + `code=500`
+- 资源不存在：`200` + `code=0, data=null`
 
 ## 注意事项
 
