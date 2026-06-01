@@ -24,6 +24,9 @@ frontend/dist/
 # Env
 .env
 
+# Prompt
+prompt.md
+
 # Data output (large files)
 output/
 

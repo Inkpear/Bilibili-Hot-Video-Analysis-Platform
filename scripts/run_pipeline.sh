@@ -36,7 +36,7 @@ $SSH_CMD "spark-sql --master spark://master:7077 -f /home/hadoop/sql/spark_etl.s
 # Step 3: 标题词云 MapReduce
 echo ""
 echo "[3/4] 运行标题词云 MapReduce..."
-bash "$SCRIPT_DIR/run_tag_cloud_mr.sh"
+$SSH_CMD "bash /home/hadoop/scripts/run_tag_cloud_mr.sh"
 
 # Step 4: 导出到 MySQL
 echo ""

@@ -71,7 +71,33 @@ UP 主作为视频内嵌环节独立提交（成功即写入，不参与视频�
 | 评论 | 首次 + 缺失重试 | `comment_id` | 每 bvid 最多 200 条，采集完标记 has_comments=1 |
 | 弹幕 | 首次 + 缺失重试 | `danmaku_id` | 每 bvid 最多 3000 条，采集完标记 has_danmaku=1 |
 
-进度展示：TTY 前台运行时使用 tqdm；systemd 非 TTY 运行时输出逐视频 `INFO` 文本日志。采集部署为 user-level systemd 常驻服务，启动即采集，采集完成后休眠 6 小时再进入下一轮。
+进度展示：TTY 前台运行时使用 tqdm；systemd 非 TTY 运行时输出逐视频 `INFO` 文本日志。
+
+**自动化策略**：
+
+采集部署为 user-level systemd 常驻服务（`crawler.service`），采用"立即启动 + 循环休眠"模式：
+
+1. **启动行为**：服务启动后立即开始第一轮采集
+2. **循环逻辑**：采集完成 → 运行 ETL 管线（HDFS 上传 + Spark ETL + 词云 + MySQL 导出）→ 休眠 6 小时 → 下一轮
+3. **停止行为**：收到 SIGTERM 信号后，当前轮结束后优雅退出
+4. **重启策略**：`Restart=always`，服务异常退出后 60 秒自动重启
+
+核心脚本 `scripts/crawler_loop.sh`：
+```bash
+while [ "$stop_requested" -eq 0 ]; do
+    python3 main.py --once          # 采集
+    bash run_pipeline.sh            # ETL
+    sleep 21600                     # 休眠 6 小时
+done
+```
+
+环境变量：
+- `CRAWLER_SLEEP_SECONDS`：休眠间隔（默认 21600 = 6 小时）
+- `CRAWLER_DIR`：crawler 脚本目录（默认 `$HOME/crawler`）
+- `SCRIPTS_DIR`：scripts 目录（默认 `$HOME/scripts`）
+
+查看日志：`journalctl --user -u crawler.service -f`
+停止服务：`systemctl --user stop crawler.service`
 
 ### 3.2 数据规模
 

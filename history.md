@@ -842,3 +842,76 @@ ssh UbuntuDesktop "journalctl --user -u crawler.service -f"
 - `crawler.timer` 已移除，状态为 `not-found/inactive`。
 - 新快照 `20260531_1842` 已开始采集。
 - SQLite `crawler_state.db-wal` 和 `crawler_state.db-shm` 为正常可见文件，不再是 deleted fd。
+
+---
+
+## 2026-06-01 10:30 - 数据管线全链路修复与验证
+
+### 目标
+修复 P10（词云 MapReduce 输出异常）并验证数据管线全链路：采集 → HDFS → Hive/Spark ETL → MapReduce 词云 → MySQL 导出。
+
+### 集群健康检查
+对 3 台 Hadoop 节点进行全面检查：
+
+| 组件 | 状态 | 说明 |
+|---|---|---|
+| HDFS | ✅ | 3 个 DataNode 在线，读写正常，无 missing/corrupt blocks |
+| YARN | ✅ | 3 个 NodeManager 在线，MapReduce 测试通过 |
+| Hive | ✅ | Metastore 正常，JsonSerDe 和 Parquet 表可用 |
+| Spark | ✅ | Master/Worker 正常，能读取 Hive metastore |
+| MySQL | ✅ | 服务正常，utf8mb4 字符集，JDBC 连接正常 |
+| Python/Jieba | ✅ | 三节点 Python 3.6.8，jieba 可用 |
+
+### P10 根因分析
+**现象**：MapReduce 输出所有 `tag_count` 都是 1，`tag_count >= 2` 过滤掉了所有行。
+
+**根因**：Hadoop Streaming 使用 `-files`（复数）作为 Streaming 选项，但 Hadoop Streaming 不支持此选项，导致 reducer.py 未分发到 worker 节点，reducer 执行失败。
+
+**验证方法**：
+```bash
+# 测试1: 简单 INSERT INTO 无窗口函数 → 978 行成功
+# 测试2: 带窗口函数的 INSERT INTO → 0 行失败
+# 测试3: 只过滤 tag_count >= 2 → 0 行失败
+# 结论: 问题在 MR 输出，不在 Spark SQL
+```
+
+### 修复方案
+1. **Hadoop Streaming 参数**：`-files` 改为 `-file`（单数）
+2. **脚本架构**：`run_tag_cloud_mr.sh` 支持本地/远程运行模式
+3. **字符集问题**：`export_to_mysql.py` JDBC URL 添加 `characterEncoding=utf8`
+4. **编码问题**：`print` 语句中的 `✓` 改为 `OK`
+
+### 关键验证
+```bash
+# MR 输出验证
+hdfs dfs -cat /data/bilibili/mr_output/title_words/part-00000 | wc -l  # 934 行
+hdfs dfs -cat /data/bilibili/mr_output/title_words/part-00000 | awk -F "\t" "$3 > 1" | wc -l  # 42 行
+
+# Spark SQL 写入验证
+spark-sql -e "SELECT COUNT(*) FROM ads_tag_cloud"  # 42 行
+
+# MySQL 导出验证
+mysql -u hive -pHive@123456 -e "SELECT category, COUNT(*) FROM ads_tag_cloud GROUP BY category"
+# 全站: 34, 游戏: 2, 科技: 1, 舞蹈: 2, 音乐: 3
+```
+
+### 文件变更
+| 文件 | 变更 |
+|---|---|
+| `scripts/run_tag_cloud_mr.sh` | `-files` 改为 `-file`，支持本地/远程运行，使用 SQL 文件执行 |
+| `scripts/export_to_mysql.py` | JDBC URL 添加字符集参数，修复编码问题 |
+| `scripts/run_pipeline.sh` | 步骤 3 改为在 master 上直接执行 |
+| `docs/plan.md` | 更新自动化策略说明 |
+| `docs/pipeline_fix_log.md` | 新增 P10 解决方案记录 |
+
+### systemd 服务重新部署
+- 更新 `crawler.service` 描述为"常驻循环模式"
+- 添加 `TimeoutStopSec=300` 配置
+- 重新部署并启动服务
+- 验证服务状态：`active (running)`
+
+### 结果
+- P10 问题完全解决，词云流程正常
+- 7 张 ADS 表全部成功导出 MySQL
+- 数据管线全链路验证通过
+- systemd 服务正常运行

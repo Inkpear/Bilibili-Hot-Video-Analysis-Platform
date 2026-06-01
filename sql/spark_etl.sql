@@ -141,7 +141,7 @@ SELECT
     content,
     COALESCE(like_count, 0) AS like_count,
     COALESCE(reply_count, 0) AS reply_count,
-    FROM_UNIXTIME(CAST(comment_time AS BIGINT)) AS comment_time
+    CAST(FROM_UNIXTIME(CAST(comment_time AS BIGINT)) AS TIMESTAMP) AS comment_time
 FROM ods_video_comment_raw
 WHERE content IS NOT NULL
   AND content != ''
@@ -174,7 +174,7 @@ SELECT
     fontsize,
     color,
     mid_hash,
-    FROM_UNIXTIME(CAST(send_time AS BIGINT)) AS send_time
+    CAST(FROM_UNIXTIME(CAST(send_time AS BIGINT)) AS TIMESTAMP) AS send_time
 FROM ods_video_danmaku_raw
 WHERE content IS NOT NULL
   AND content != ''
@@ -183,7 +183,7 @@ WHERE content IS NOT NULL
 -- 4.5 UP 主信息表
 DROP TABLE IF EXISTS dwd_up_info;
 CREATE TABLE dwd_up_info (
-    up_id           BIGINT,
+    up_id           STRING,
     up_name         STRING,
     up_avatar       STRING,
     follower_count  BIGINT,
@@ -316,7 +316,7 @@ SELECT
     COUNT(DISTINCT v.bvid) AS hot_video_count,
     SUM(s.view_count) AS total_views
 FROM dwd_up_info u
-LEFT JOIN dwd_video_info v ON CAST(u.up_id AS STRING) = v.up_id
+LEFT JOIN dwd_video_info v ON u.up_id = v.up_id
 LEFT JOIN canonical s ON v.bvid = s.bvid
 GROUP BY u.up_id, u.up_name, u.up_avatar, u.follower_count, u.video_count;
 

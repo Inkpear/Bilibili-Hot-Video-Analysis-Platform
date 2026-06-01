@@ -148,6 +148,7 @@ virsh net-dhcp-leases hadoop-net
 - [x] Hive DDL + Spark SQL ETL — ODS/DWD/DWS/ADS 全链路 SQL，已部署到集群
 - [x] MySQL 建表 + 数据导出 — 7 张 ADS 表，Spark JDBC 导出脚本
 - [x] MapReduce 标题词云 — Hadoop Streaming + Python3/jieba，已接入日常管线
+- [x] 数据管线全链路验证 — P10 问题已解决，7 张 ADS 表全部导出 MySQL 成功
 - [ ] Rust 后端 8 个 API 实现
 - [ ] React 前端大屏开发
 - [ ] 课程报告 + PPT

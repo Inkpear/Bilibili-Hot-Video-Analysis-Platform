@@ -84,7 +84,7 @@ LOCATION '/data/bilibili/ods/video_danmaku/';
 -- ----------------------------------------------------------------------------
 DROP TABLE IF EXISTS ods_up_raw;
 CREATE EXTERNAL TABLE ods_up_raw (
-    up_id           BIGINT,
+    up_id           STRING,
     up_name         STRING,
     up_avatar       STRING,
     follower_count  BIGINT,

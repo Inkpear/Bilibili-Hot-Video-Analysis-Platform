@@ -17,7 +17,7 @@ import sys
 
 from pyspark.sql import SparkSession
 
-MYSQL_URL = "jdbc:mysql://master:3306/bilibili"
+MYSQL_URL = "jdbc:mysql://master:3306/bilibili?useUnicode=true&characterEncoding=utf8&connectionCollation=utf8mb4_unicode_ci"
 MYSQL_USER = "hive"
 MYSQL_PASS = "Hive@123456"
 MYSQL_DRIVER = "com.mysql.cj.jdbc.Driver"
@@ -55,7 +55,7 @@ for tbl in TABLES:
             .mode("overwrite") \
             .save()
 
-        print(f"  {tbl}: {count} rows exported ✓")
+        print(f"  {tbl}: {count} rows exported OK")
 
     except Exception as e:
         print(f"  {tbl}: FAILED - {e}")
