@@ -90,7 +90,7 @@ export default function InteractionRadar() {
       {loading ? (
         <Loading rows={4} />
       ) : rates ? (
-        <div className="flex flex-col h-full min-h-0">
+        <div key={selectedBvid ?? 'max'} className="flex flex-col h-full min-h-0 animate-content-switch">
           {!selectedBvid && (
             <div className="text-[10px] text-text-muted text-center pb-1 shrink-0">
               样本各指标最大值（选择视频查看具体数据）

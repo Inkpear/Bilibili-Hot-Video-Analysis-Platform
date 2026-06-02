@@ -33,15 +33,21 @@ export default function WordCloud() {
     const { commentShown, danmakuShown } = carousel.wordCloud
     if (commentShown && danmakuShown) return
 
-    const currentSource = commentShown && !danmakuShown ? 'danmaku' : 'comment'
-    setWordCloudSource(currentSource)
-    markWordCloudShown(currentSource)
-
-    switchTimerRef.current = setTimeout(() => {
-      const nextSource: WordCloudSource = currentSource === 'comment' ? 'danmaku' : 'comment'
-      setWordCloudSource(nextSource)
-      markWordCloudShown(nextSource)
-    }, 5000)
+    if (!commentShown) {
+      setWordCloudSource('comment')
+      switchTimerRef.current = setTimeout(() => {
+        markWordCloudShown('comment')
+        setWordCloudSource('danmaku')
+        switchTimerRef.current = setTimeout(() => {
+          markWordCloudShown('danmaku')
+        }, 5000)
+      }, 5000)
+    } else if (!danmakuShown) {
+      setWordCloudSource('danmaku')
+      switchTimerRef.current = setTimeout(() => {
+        markWordCloudShown('danmaku')
+      }, 5000)
+    }
 
     return () => {
       if (switchTimerRef.current) clearTimeout(switchTimerRef.current)

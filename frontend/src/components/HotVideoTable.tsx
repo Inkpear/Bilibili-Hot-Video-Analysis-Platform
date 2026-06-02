@@ -226,7 +226,7 @@ export default function HotVideoTable() {
                         border-b border-border-default/30 transition-all duration-300
                         ${carousel.on ? 'cursor-default' : 'cursor-pointer'}
                         ${isSelected
-                          ? 'bg-bili-blue/10 border-l-2 border-l-bili-blue'
+                          ? 'bg-bili-blue/10 border-l-2 border-l-bili-blue animate-pulse-border'
                           : 'hover:bg-bg-elevated'}
                       `}
                     >

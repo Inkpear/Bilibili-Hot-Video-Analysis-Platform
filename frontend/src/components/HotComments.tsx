@@ -64,7 +64,7 @@ export default function HotComments() {
       {loading ? (
         <Loading rows={6} />
       ) : (
-        <div ref={scrollRef} className="flex flex-col gap-1 overflow-auto min-h-0 h-full scrollbar-hide">
+        <div key={selectedBvid ?? 'all'} ref={scrollRef} className="flex flex-col gap-1 overflow-auto min-h-0 h-full scrollbar-hide animate-content-switch">
           {data?.comments.map((c, i) => {
             const isActive = isCarouselActive && i === activeIdx
             return (

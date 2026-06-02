@@ -154,9 +154,11 @@ export default function LifecycleChart() {
       {loading ? (
         <Loading rows={5} />
       ) : videos.length > 0 ? (
-        <ChartWrapper option={option} />
+        <div key={selectedBvid ?? 'top'} className="h-full animate-content-switch">
+          <ChartWrapper option={option} />
+        </div>
       ) : noLifecycleData ? (
-        <div className="flex flex-col items-center justify-center h-full gap-2 text-text-muted text-sm">
+        <div className="flex flex-col items-center justify-center h-full gap-2 text-text-muted text-sm animate-fade-in">
           <span>该视频暂无生命周期数据</span>
           <span className="text-xs">（需要多轮采集后才有趋势）</span>
         </div>
