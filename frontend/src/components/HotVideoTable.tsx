@@ -2,7 +2,7 @@ import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
 import { useApi } from '../hooks/useApi'
 import { fetchHotVideos } from '../api'
 import { useDashboard } from '../context/DashboardContext'
-import { formatNumber } from '../utils/format'
+import { formatNumber, formatPercent } from '../utils/format'
 import Card from './common/Card'
 import Loading from './common/Loading'
 import type { HotVideosSort, HotVideoItem } from '../types'
@@ -18,6 +18,8 @@ const MAX_VIDEO_MS = 20000
 
 export default function HotVideoTable() {
   const [sort, setSort] = useState<HotVideosSort>('heat')
+  const [hoveredVideo, setHoveredVideo] = useState<HotVideoItem | null>(null)
+  const [hoverPos, setHoverPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 })
 
   const { data, loading } = useApi(() => fetchHotVideos(sort, 100, 0), [sort])
   const {
@@ -97,8 +99,24 @@ export default function HotVideoTable() {
     return () => stopCarousel()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
+  const handleRowHover = useCallback((video: HotVideoItem | null, e?: React.MouseEvent) => {
+    setHoveredVideo(video)
+    if (e) {
+      setHoverPos({ x: e.clientX, y: e.clientY })
+    }
+  }, [])
+
   const sortLabel = SORT_OPTIONS.find((s) => s.value === sort)?.label ?? '热度'
   const wcDone = carousel.on && carousel.wordCloud.commentShown && carousel.wordCloud.danmakuShown
+
+  const getSortValue = (v: HotVideoItem) => {
+    switch (sort) {
+      case 'views': return v.view_count
+      case 'likes': return v.like_count
+      case 'coins': return v.coin_count
+      default: return v.heat_score
+    }
+  }
 
   const extra = (
     <div className="flex items-center gap-2">
@@ -143,7 +161,7 @@ export default function HotVideoTable() {
   )
 
   return (
-    <Card title="热门视频" extra={extra} className="h-full">
+    <Card title="热门视频" extra={extra} className="h-full relative">
       {loading ? (
         <Loading rows={8} />
       ) : (
@@ -160,6 +178,7 @@ export default function HotVideoTable() {
                 <tr className="text-text-muted border-b border-border-default">
                   <th className="py-1.5 text-left w-8">#</th>
                   <th className="py-1.5 text-left">标题</th>
+                  <th className="py-1.5 text-left">UP主</th>
                   <th className="py-1.5 text-left">分区</th>
                   <th className="py-1.5 text-right">播放</th>
                   <th className="py-1.5 text-right">点赞</th>
@@ -179,6 +198,8 @@ export default function HotVideoTable() {
                         if (carousel.on) return
                         setSelectedBvid(v.bvid === selectedBvid ? null : v.bvid)
                       }}
+                      onMouseEnter={(e) => handleRowHover(v, e)}
+                      onMouseLeave={() => handleRowHover(null)}
                       className={`
                         border-b border-border-default/30 transition-all duration-300
                         ${carousel.on ? 'cursor-default' : 'cursor-pointer'}
@@ -188,18 +209,15 @@ export default function HotVideoTable() {
                       `}
                     >
                       <td className="py-1.5 font-mono-num text-text-muted">{i + 1}</td>
-                      <td className="py-1.5 max-w-[200px] truncate text-text-primary">{v.title}</td>
+                      <td className="py-1.5 max-w-[180px] truncate text-text-primary">{v.title}</td>
+                      <td className="py-1.5 text-text-muted max-w-[80px] truncate">{v.up_name}</td>
                       <td className="py-1.5 text-text-muted">
                         <span className="px-1.5 py-0.5 rounded bg-bg-elevated text-[10px]">{v.category}</span>
                       </td>
                       <td className="py-1.5 text-right font-mono-num text-text-secondary">{formatNumber(v.view_count)}</td>
                       <td className="py-1.5 text-right font-mono-num text-text-secondary">{formatNumber(v.like_count)}</td>
                       <td className="py-1.5 text-right font-mono-num text-bili-pink font-semibold">
-                        {sort === 'heat' ? v.heat_score.toFixed(3) : formatNumber(
-                          sort === 'views' ? v.view_count :
-                          sort === 'likes' ? v.like_count :
-                          v.coin_count
-                        )}
+                        {sort === 'heat' ? v.heat_score.toFixed(3) : formatNumber(getSortValue(v))}
                       </td>
                     </tr>
                   )
@@ -213,6 +231,91 @@ export default function HotVideoTable() {
           </div>
         </div>
       )}
+
+      {hoveredVideo && !carousel.on && (
+        <HoverCard video={hoveredVideo} pos={hoverPos} />
+      )}
     </Card>
+  )
+}
+
+function HoverCard({ video, pos }: { video: HotVideoItem; pos: { x: number; y: number } }) {
+  const cardRef = useRef<HTMLDivElement>(null)
+  const [adjusted, setAdjusted] = useState(false)
+
+  useEffect(() => {
+    if (cardRef.current) {
+      const rect = cardRef.current.getBoundingClientRect()
+      if (rect.right > window.innerWidth) {
+        setAdjusted(true)
+      }
+    }
+  }, [pos])
+
+  const rates = video.view_count > 0 ? {
+    like: video.like_count / video.view_count,
+    coin: video.coin_count / video.view_count,
+    fav: video.favorite_count / video.view_count,
+    reply: video.reply_count / video.view_count,
+    share: video.share_count / video.view_count,
+  } : null
+
+  return (
+    <div
+      ref={cardRef}
+      className="fixed z-50 pointer-events-none animate-fade-in"
+      style={{
+        left: adjusted ? pos.x - 280 : pos.x + 16,
+        top: pos.y - 40,
+      }}
+    >
+      <div className="bg-bg-card border border-border-bili rounded-lg shadow-2xl p-3 w-[260px]">
+        <div className="text-sm font-medium text-text-primary mb-2 line-clamp-1">{video.title}</div>
+        <div className="flex items-center gap-2 mb-3">
+          <span className="text-xs text-bili-blue">{video.up_name}</span>
+          <span className="text-[10px] text-text-muted px-1.5 py-0.5 rounded bg-bg-elevated">{video.category}</span>
+        </div>
+
+        <div className="grid grid-cols-3 gap-2 mb-3">
+          {[
+            { label: '播放', value: video.view_count, color: '#00A1D6' },
+            { label: '点赞', value: video.like_count, color: '#FB7299' },
+            { label: '投币', value: video.coin_count, color: '#39D353' },
+            { label: '收藏', value: video.favorite_count, color: '#F0883E' },
+            { label: '评论', value: video.reply_count, color: '#A371F7' },
+            { label: '分享', value: video.share_count, color: '#79C0FF' },
+          ].map((item) => (
+            <div key={item.label} className="text-center">
+              <div className="text-[10px] text-text-muted">{item.label}</div>
+              <div className="font-mono-num text-xs font-semibold" style={{ color: item.color }}>
+                {formatNumber(item.value)}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {rates && (
+          <div className="border-t border-border-default pt-2">
+            <div className="text-[10px] text-text-muted mb-1">互动率</div>
+            <div className="grid grid-cols-5 gap-1">
+              {[
+                { label: '赞', value: rates.like, color: '#FB7299' },
+                { label: '币', value: rates.coin, color: '#39D353' },
+                { label: '藏', value: rates.fav, color: '#F0883E' },
+                { label: '评', value: rates.reply, color: '#A371F7' },
+                { label: '享', value: rates.share, color: '#79C0FF' },
+              ].map((r) => (
+                <div key={r.label} className="text-center">
+                  <div className="text-[9px] text-text-muted">{r.label}</div>
+                  <div className="font-mono-num text-[10px]" style={{ color: r.color }}>
+                    {formatPercent(r.value)}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
   )
 }
