@@ -41,7 +41,7 @@ pub async fn hot_videos(
     let limit = query.limit.unwrap_or(20);
     let offset = query.offset.unwrap_or(0);
 
-    if limit < 0 || limit > 100 {
+    if !(0..=100).contains(&limit) {
         return Err(AppError::bad_request("limit must be between 0 and 100"));
     }
     if offset < 0 {
@@ -217,7 +217,7 @@ pub async fn lifecycle_top(
     Query(query): Query<LifecycleTopQuery>,
 ) -> Result<Json<ApiResponse<LifecycleTopData>>, AppError> {
     let limit = query.limit.unwrap_or(5);
-    if limit < 0 || limit > 100 {
+    if !(0..=100).contains(&limit) {
         return Err(AppError::bad_request("limit must be between 0 and 100"));
     }
 
@@ -355,9 +355,7 @@ pub async fn word_cloud(
     Query(query): Query<WordCloudQuery>,
 ) -> Result<Json<ApiResponse<WordCloudData>>, AppError> {
     let source = match query.source.as_deref() {
-        Some("title") | Some("comment") | Some("danmaku") => {
-            query.source.unwrap()
-        }
+        Some("title") | Some("comment") | Some("danmaku") => query.source.unwrap(),
         Some(other) => {
             return Err(AppError::bad_request(format!(
                 "invalid source '{}', allowed: title, comment, danmaku",
@@ -404,14 +402,12 @@ pub async fn hot_comments(
     Query(query): Query<HotCommentsQuery>,
 ) -> Result<Json<ApiResponse<HotCommentsData>>, AppError> {
     let limit = query.limit.unwrap_or(20);
-    if limit < 0 || limit > 100 {
+    if !(0..=100).contains(&limit) {
         return Err(AppError::bad_request("limit must be between 0 and 100"));
     }
 
     if limit == 0 {
-        return Ok(Json(ApiResponse::ok(HotCommentsData {
-            comments: vec![],
-        })));
+        return Ok(Json(ApiResponse::ok(HotCommentsData { comments: vec![] })));
     }
 
     let rows = match (&query.bvid, &query.category) {

@@ -13,6 +13,7 @@ impl AppError {
         Self::BadRequest(msg.into())
     }
 
+    #[allow(dead_code)]
     pub fn internal(msg: impl Into<String>) -> Self {
         Self::Internal(msg.into())
     }

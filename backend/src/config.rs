@@ -2,6 +2,7 @@ use serde::Deserialize;
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct AppConfig {
+    #[allow(dead_code)]
     pub database_url: String,
     pub api_token: Option<String>,
     pub bind: String,
