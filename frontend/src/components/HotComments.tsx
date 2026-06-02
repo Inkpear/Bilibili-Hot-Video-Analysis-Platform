@@ -1,4 +1,4 @@
-import { useRef, useEffect } from 'react'
+import { useRef, useEffect, useCallback } from 'react'
 import { useApi } from '../hooks/useApi'
 import { fetchHotComments } from '../api'
 import { useDashboard } from '../context/DashboardContext'
@@ -7,7 +7,7 @@ import Card from './common/Card'
 import Loading from './common/Loading'
 
 export default function HotComments() {
-  const { selectedCategory, selectedBvid, carouselOn } = useDashboard()
+  const { selectedCategory, selectedBvid, carouselOn, setReadyToSwitch } = useDashboard()
   const { data, loading } = useApi(
     () => fetchHotComments(selectedCategory ?? undefined, selectedBvid ?? undefined, 20),
     [selectedCategory, selectedBvid]
@@ -15,6 +15,21 @@ export default function HotComments() {
 
   const scrollRef = useRef<HTMLDivElement>(null)
   const scrollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const hasReachedBottom = useRef(false)
+
+  const handleScroll = useCallback(() => {
+    const el = scrollRef.current
+    if (!el || !carouselOn) return
+    const atBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 10
+    if (atBottom && !hasReachedBottom.current) {
+      hasReachedBottom.current = true
+      setReadyToSwitch(true)
+    }
+  }, [carouselOn, setReadyToSwitch])
+
+  useEffect(() => {
+    hasReachedBottom.current = false
+  }, [selectedBvid])
 
   useEffect(() => {
     if (carouselOn && data && data.comments.length > 0) {
@@ -26,7 +41,12 @@ export default function HotComments() {
         if (!el) return
         scrollTop += 1
         el.scrollTop = scrollTop
-        if (scrollTop >= el.scrollHeight - el.clientHeight) {
+        const atBottom = scrollTop >= el.scrollHeight - el.clientHeight - 10
+        if (atBottom && !hasReachedBottom.current) {
+          hasReachedBottom.current = true
+          setReadyToSwitch(true)
+        }
+        if (atBottom) {
           scrollTop = 0
         }
       }, 50)
@@ -39,14 +59,18 @@ export default function HotComments() {
       if (scrollTimerRef.current) clearInterval(scrollTimerRef.current)
       scrollTimerRef.current = null
     }
-  }, [carouselOn, data])
+  }, [carouselOn, data, setReadyToSwitch])
 
   return (
     <Card title="热门评论" className="h-full">
       {loading ? (
         <Loading rows={6} />
       ) : (
-        <div ref={scrollRef} className="flex flex-col gap-2 overflow-auto min-h-0 h-full scrollbar-hide">
+        <div
+          ref={scrollRef}
+          onScroll={handleScroll}
+          className="flex flex-col gap-2 overflow-auto min-h-0 h-full scrollbar-hide"
+        >
           {data?.comments.map((c, i) => (
             <div
               key={`${c.bvid}-${i}`}

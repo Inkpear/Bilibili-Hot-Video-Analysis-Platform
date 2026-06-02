@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback } from 'react';
+import { createContext, useContext, useState, useCallback, useRef } from 'react';
 import type { ReactNode } from 'react';
 import type { WordCloudSource } from '../types';
 
@@ -13,6 +13,9 @@ interface DashboardState {
   setSelectedWord: (word: string | null) => void;
   setWordCloudSource: (source: WordCloudSource) => void;
   setCarouselOn: (on: boolean) => void;
+  requestNextVideo: () => void;
+  setReadyToSwitch: (ready: boolean) => void;
+  readyToSwitchRef: React.MutableRefObject<boolean>;
 }
 
 const DashboardContext = createContext<DashboardState | null>(null);
@@ -23,6 +26,9 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   const [selectedWord, setSelectedWord] = useState<string | null>(null);
   const [wordCloudSource, setWordCloudSource] = useState<WordCloudSource>('title');
   const [carouselOn, setCarouselOn] = useState(false);
+
+  const readyToSwitchRef = useRef(false);
+  const requestNextRef = useRef<(() => void) | null>(null);
 
   const handleSetSelectedBvid = useCallback((bvid: string | null) => {
     setSelectedBvid(bvid);
@@ -41,6 +47,16 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     setWordCloudSource(source);
   }, []);
 
+  const requestNextVideo = useCallback(() => {
+    if (requestNextRef.current) {
+      requestNextRef.current();
+    }
+  }, []);
+
+  const setReadyToSwitch = useCallback((ready: boolean) => {
+    readyToSwitchRef.current = ready;
+  }, []);
+
   return (
     <DashboardContext.Provider
       value={{
@@ -54,6 +70,9 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
         setSelectedWord: handleSetSelectedWord,
         setWordCloudSource: handleSetWordCloudSource,
         setCarouselOn,
+        requestNextVideo,
+        setReadyToSwitch,
+        readyToSwitchRef,
       }}
     >
       {children}

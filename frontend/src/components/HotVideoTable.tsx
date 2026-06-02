@@ -15,6 +15,7 @@ const SORT_OPTIONS: { value: HotVideosSort; label: string }[] = [
 ]
 
 const PAGE_SIZE = 20
+const MAX_VIDEO_TIME = 15000
 
 export default function HotVideoTable() {
   const [sort, setSort] = useState<HotVideosSort>('heat')
@@ -24,12 +25,15 @@ export default function HotVideoTable() {
   const [loadingMore, setLoadingMore] = useState(false)
 
   const { data, loading } = useApi(() => fetchHotVideos(sort, PAGE_SIZE, 0), [sort])
-  const { selectedBvid, setSelectedBvid, selectedCategory, selectedWord, carouselOn, setCarouselOn } = useDashboard()
+  const {
+    selectedBvid, setSelectedBvid, selectedCategory, selectedWord,
+    carouselOn, setCarouselOn, readyToSwitchRef, setReadyToSwitch,
+  } = useDashboard()
 
   const scrollRef = useRef<HTMLDivElement>(null)
   const sentinelRef = useRef<HTMLDivElement>(null)
-  const carouselRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const [carouselIdx, setCarouselIdx] = useState(0)
+  const videosRef = useRef<HotVideoItem[]>([])
 
   useEffect(() => {
     if (data) {
@@ -76,51 +80,60 @@ export default function HotVideoTable() {
     return list
   }, [allVideos, selectedCategory, selectedWord])
 
-  const sortLabel = SORT_OPTIONS.find((s) => s.value === sort)?.label ?? '热度'
+  useEffect(() => {
+    videosRef.current = videos
+  }, [videos])
+
+  const advanceCarousel = useCallback(() => {
+    setCarouselIdx((prev) => {
+      const vids = videosRef.current
+      const next = (prev + 1) % vids.length
+      setSelectedBvid(vids[next]?.bvid ?? null)
+      return next
+    })
+    setReadyToSwitch(false)
+  }, [setSelectedBvid, setReadyToSwitch])
+
+  useEffect(() => {
+    if (!carouselOn) return
+
+    const checkInterval = setInterval(() => {
+      if (readyToSwitchRef.current) {
+        advanceCarousel()
+      }
+    }, 500)
+
+    const maxTimer = setTimeout(() => {
+      advanceCarousel()
+    }, MAX_VIDEO_TIME)
+
+    return () => {
+      clearInterval(checkInterval)
+      clearTimeout(maxTimer)
+    }
+  }, [carouselOn, selectedBvid, advanceCarousel, readyToSwitchRef])
 
   const handleCarousel = useCallback(() => {
     if (carouselOn) {
-      if (carouselRef.current) clearInterval(carouselRef.current)
-      carouselRef.current = null
       setCarouselOn(false)
+      setCarouselIdx(0)
       return
     }
     setCarouselOn(true)
     setCarouselIdx(0)
+    setReadyToSwitch(false)
     if (videos.length > 0) {
       setSelectedBvid(videos[0].bvid)
     }
-    carouselRef.current = setInterval(() => {
-      setCarouselIdx((prev) => {
-        const next = (prev + 1) % videos.length
-        setSelectedBvid(videos[next]?.bvid ?? null)
-        return next
-      })
-    }, 3000)
-  }, [carouselOn, videos, setSelectedBvid])
+  }, [carouselOn, videos, setSelectedBvid, setCarouselOn, setReadyToSwitch])
 
   useEffect(() => {
     return () => {
-      if (carouselRef.current) clearInterval(carouselRef.current)
+      setCarouselOn(false)
     }
-  }, [])
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  useEffect(() => {
-    if (carouselOn && carouselRef.current) {
-      clearInterval(carouselRef.current)
-      setCarouselIdx(0)
-      if (videos.length > 0) {
-        setSelectedBvid(videos[0].bvid)
-      }
-      carouselRef.current = setInterval(() => {
-        setCarouselIdx((prev) => {
-          const next = (prev + 1) % videos.length
-          setSelectedBvid(videos[next]?.bvid ?? null)
-          return next
-        })
-      }, 3000)
-    }
-  }, [sort, selectedCategory, selectedWord]) // eslint-disable-line react-hooks/exhaustive-deps
+  const sortLabel = SORT_OPTIONS.find((s) => s.value === sort)?.label ?? '热度'
 
   const extra = (
     <div className="flex items-center gap-2">
@@ -196,6 +209,11 @@ export default function HotVideoTable() {
                   return (
                     <tr
                       key={v.bvid}
+                      ref={isSelected ? (el) => {
+                        if (el) {
+                          setTimeout(() => el.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 100)
+                        }
+                      } : undefined}
                       onClick={() => {
                         if (carouselOn) return
                         setSelectedBvid(v.bvid === selectedBvid ? null : v.bvid)

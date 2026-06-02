@@ -41,19 +41,26 @@ export default function LifecycleChart() {
     return {
       grid: {
         left: 56,
-        right: 20,
-        top: hasLegend ? 40 : 16,
+        right: hasLegend ? '22%' : 20,
+        top: 16,
         bottom: 36,
         containLabel: false,
       },
       legend: {
         show: hasLegend,
-        top: 4,
-        left: 'center',
+        orient: 'vertical',
+        right: '2%',
+        top: 'middle',
         itemWidth: 12,
         itemHeight: 8,
-        itemGap: 12,
-        textStyle: { color: '#8B949E', fontSize: 10 },
+        itemGap: 14,
+        textStyle: {
+          color: '#8B949E',
+          fontSize: 10,
+          width: 90,
+          overflow: 'truncate',
+          ellipsis: '…',
+        },
       },
       tooltip: {
         trigger: 'axis',

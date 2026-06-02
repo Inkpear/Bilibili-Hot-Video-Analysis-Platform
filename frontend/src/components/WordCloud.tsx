@@ -15,10 +15,11 @@ const SOURCE_LABELS: Record<WordCloudSource, string> = {
   danmaku: '弹幕',
 }
 
-const CAROUSEL_SOURCES: WordCloudSource[] = ['comment', 'danmaku']
-
 export default function WordCloud() {
-  const { selectedCategory, selectedBvid, selectedWord, setSelectedWord, wordCloudSource, setWordCloudSource, carouselOn } = useDashboard()
+  const {
+    selectedCategory, selectedBvid, selectedWord, setSelectedWord,
+    wordCloudSource, setWordCloudSource, carouselOn, setReadyToSwitch,
+  } = useDashboard()
 
   const sourceTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const sourceIdxRef = useRef(0)
@@ -27,10 +28,16 @@ export default function WordCloud() {
     if (carouselOn && selectedBvid) {
       sourceIdxRef.current = 0
       setWordCloudSource('comment')
+
       sourceTimerRef.current = setInterval(() => {
-        sourceIdxRef.current = (sourceIdxRef.current + 1) % CAROUSEL_SOURCES.length
-        setWordCloudSource(CAROUSEL_SOURCES[sourceIdxRef.current])
-      }, 6000)
+        sourceIdxRef.current = (sourceIdxRef.current + 1) % 2
+        const next = sourceIdxRef.current === 0 ? 'comment' : 'danmaku'
+        setWordCloudSource(next)
+        if (sourceIdxRef.current === 1) {
+          setReadyToSwitch(true)
+        }
+      }, 8000)
+
       return () => {
         if (sourceTimerRef.current) clearInterval(sourceTimerRef.current)
       }
@@ -39,14 +46,17 @@ export default function WordCloud() {
       if (sourceTimerRef.current) clearInterval(sourceTimerRef.current)
       sourceTimerRef.current = null
     }
-  }, [carouselOn, selectedBvid, setWordCloudSource])
+  }, [carouselOn, selectedBvid, setWordCloudSource, setReadyToSwitch])
+
+  const hideTitleCloud = !!selectedBvid
+  const effectiveSource: WordCloudSource = hideTitleCloud ? wordCloudSource : 'title'
 
   const categoryParam = selectedCategory ?? undefined
   const bvidParam = selectedBvid ?? undefined
 
   const { data, loading } = useApi(
-    () => fetchWordCloud(wordCloudSource, categoryParam, bvidParam),
-    [wordCloudSource, categoryParam, bvidParam]
+    () => fetchWordCloud(effectiveSource, categoryParam, bvidParam),
+    [effectiveSource, categoryParam, bvidParam]
   )
 
   const hasWords = (data?.words?.length ?? 0) > 0
@@ -54,9 +64,7 @@ export default function WordCloud() {
   const handleChartClick = useCallback(
     (params: unknown) => {
       const p = params as { name?: string }
-      if (p.name) {
-        setSelectedWord(p.name)
-      }
+      if (p.name) setSelectedWord(p.name)
     },
     [setSelectedWord]
   )
@@ -101,43 +109,47 @@ export default function WordCloud() {
       } as EChartsOption)
     : {}
 
-  const extra = (
-    <div className="flex items-center gap-2">
-      {selectedWord && (
-        <button
-          onClick={() => setSelectedWord(null)}
-          className="px-1.5 py-0.5 text-[10px] rounded bg-bili-pink/20 text-bili-pink hover:bg-bili-pink/30 transition-colors"
-        >
-          {selectedWord} ✕
-        </button>
-      )}
-      <div className="flex gap-1">
-        {(['title', 'comment', 'danmaku'] as const).map((s) => (
+  const extra = hideTitleCloud
+    ? (
+      <div className="flex items-center gap-2">
+        {selectedWord && (
           <button
-            key={s}
-            onClick={() => { if (!carouselOn) setWordCloudSource(s) }}
-            className={`px-2 py-0.5 text-xs rounded transition-colors ${
-              wordCloudSource === s
-                ? 'bg-bili-blue text-white'
-                : 'text-text-muted hover:text-text-secondary'
-            } ${carouselOn ? 'opacity-50 cursor-not-allowed' : ''}`}
+            onClick={() => setSelectedWord(null)}
+            className="px-1.5 py-0.5 text-[10px] rounded bg-bili-pink/20 text-bili-pink hover:bg-bili-pink/30 transition-colors"
           >
-            {SOURCE_LABELS[s]}
+            {selectedWord} ✕
           </button>
-        ))}
+        )}
+        <div className="flex gap-1">
+          {(['comment', 'danmaku'] as const).map((s) => (
+            <button
+              key={s}
+              onClick={() => { if (!carouselOn) setWordCloudSource(s) }}
+              className={`px-2 py-0.5 text-xs rounded transition-colors ${
+                wordCloudSource === s
+                  ? 'bg-bili-blue text-white'
+                  : 'text-text-muted hover:text-text-secondary'
+              } ${carouselOn ? 'opacity-50 cursor-not-allowed' : ''}`}
+            >
+              {SOURCE_LABELS[s]}
+            </button>
+          ))}
+        </div>
       </div>
-    </div>
-  )
+    )
+    : undefined
+
+  const title = hideTitleCloud ? '词云' : '标题词云'
 
   return (
-    <Card title="词云" extra={extra} className="h-full">
+    <Card title={title} extra={extra} className="h-full">
       {loading ? (
         <Loading rows={4} />
       ) : hasWords ? (
         <ChartWrapper option={option} onEvents={{ click: handleChartClick }} />
       ) : (
         <div className="flex items-center justify-center h-full text-text-muted text-sm">
-          {selectedBvid ? '暂无词云数据' : '选择视频查看词云'}
+          暂无词云数据
         </div>
       )}
     </Card>
