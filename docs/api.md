@@ -105,7 +105,7 @@ API_TOKEN=your_secret_token_here
 在请求头中添加 `Authorization: Bearer <token>`:
 
 ```bash
-curl -H "Authorization: Bearer your_secret_token_here" http://localhost:3000/api/overview
+curl -H "Authorization: Bearer your_secret_token_here" http://localhost:9090/api/overview
 ```
 
 ### 鉴权行为
@@ -145,13 +145,13 @@ curl -H "Authorization: Bearer your_secret_token_here" http://localhost:3000/api
 
 ```bash
 # 无 token（鉴权禁用时可访问）
-curl http://localhost:3000/api/overview
+curl http://localhost:9090/api/overview
 
 # 带 token
-curl -H "Authorization: Bearer my_secret_token" http://localhost:3000/api/overview
+curl -H "Authorization: Bearer my_secret_token" http://localhost:9090/api/overview
 
 # 错误 token
-curl -H "Authorization: Bearer wrong_token" http://localhost:3000/api/overview
+curl -H "Authorization: Bearer wrong_token" http://localhost:9090/api/overview
 # → HTTP 401
 ```
 
@@ -322,13 +322,13 @@ GET /api/hot-videos?sort=heat&limit=20&offset=0
 
 ```bash
 # 默认排序，前 10 条
-curl "http://localhost:3000/api/hot-videos?sort=heat&limit=10"
+curl "http://localhost:9090/api/hot-videos?sort=heat&limit=10"
 
 # 按播放量排序，第 11~20 条
-curl "http://localhost:3000/api/hot-videos?sort=views&limit=10&offset=10"
+curl "http://localhost:9090/api/hot-videos?sort=views&limit=10&offset=10"
 
 # 非法排序参数
-curl "http://localhost:3000/api/hot-videos?sort=invalid"
+curl "http://localhost:9090/api/hot-videos?sort=invalid"
 # → HTTP 400
 ```
 
@@ -632,13 +632,13 @@ GET /api/partition-detail?category=游戏
 
 ```bash
 # 游戏分区下钻
-curl "http://localhost:3000/api/partition-detail?category=游戏"
+curl "http://localhost:9090/api/partition-detail?category=游戏"
 
 # 动画分区下钻
-curl "http://localhost:3000/api/partition-detail?category=动画"
+curl "http://localhost:9090/api/partition-detail?category=动画"
 
 # 不存在的分区
-curl "http://localhost:3000/api/partition-detail?category=不存在分区"
+curl "http://localhost:9090/api/partition-detail?category=不存在分区"
 # → data.videos = [], data.top_ups = []
 ```
 

@@ -328,21 +328,9 @@ GET /api/word-cloud?source=danmaku&category=游戏
 | `source` 非法 | 400 | 400 |
 | 无数据 | 200 | 0，`words=[]` |
 
-### 6.2 保留 `/api/tag-cloud`
+### 6.2 `/api/tag-cloud` 已废弃
 
-保留旧接口作为兼容：
-
-```text
-GET /api/tag-cloud?category=游戏
-```
-
-语义调整为：
-
-```text
-等价于 /api/word-cloud?source=title&category=游戏
-```
-
-文档中必须明确它是“标题词云/内容主题词云”，不是 B 站 tags。
+旧 `/api/tag-cloud` 接口已删除，统一替换为 `/api/word-cloud?source=title`。
 
 ### 6.3 新增 `/api/hot-comments`
 
@@ -393,7 +381,6 @@ GET /api/hot-comments?bvid=BVxxx&limit=10
 | `/api/word-cloud?source=comment` | 返回评论词云 |
 | `/api/word-cloud?source=danmaku` | 返回弹幕词云 |
 | `/api/hot-comments` | 返回热门评论列表 |
-| `/api/tag-cloud` | 兼容旧接口 |
 | 鉴权 | 未带 token 返回 401 |
 
 ## 7. 阶段五：前端可视化扩展
