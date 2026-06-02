@@ -10,17 +10,21 @@ import LifecycleChart from './components/LifecycleChart'
 
 export default function App() {
   return (
-    <div className="bg-grid h-screen p-4 flex flex-col gap-3 max-w-[1920px] mx-auto overflow-hidden">
-      <ErrorBoundary>
-        <Header />
-      </ErrorBoundary>
+    <div className="bg-grid bg-gradient-radial h-screen p-4 flex flex-col gap-3 max-w-[1920px] mx-auto overflow-hidden">
+      <div className="animate-fade-in-up">
+        <ErrorBoundary>
+          <Header />
+        </ErrorBoundary>
+      </div>
 
-      <ErrorBoundary>
-        <KPICards />
-      </ErrorBoundary>
+      <div className="animate-fade-in-up delay-100">
+        <ErrorBoundary>
+          <KPICards />
+        </ErrorBoundary>
+      </div>
 
       <div className="flex-1 min-h-0 flex gap-3">
-        <div className="w-[24%] min-w-0 flex flex-col gap-3">
+        <div className="w-[24%] min-w-0 flex flex-col gap-3 animate-slide-in-left delay-200">
           <div className="flex-1 min-h-0">
             <ErrorBoundary>
               <PartitionBar />
@@ -33,7 +37,7 @@ export default function App() {
           </div>
         </div>
 
-        <div className="flex-1 min-w-0 flex flex-col gap-3">
+        <div className="flex-1 min-w-0 flex flex-col gap-3 animate-fade-in-up delay-300">
           <div className="flex-1 min-h-0">
             <ErrorBoundary>
               <HotVideoTable />
@@ -46,7 +50,7 @@ export default function App() {
           </div>
         </div>
 
-        <div className="w-[28%] min-w-0 flex flex-col gap-3">
+        <div className="w-[28%] min-w-0 flex flex-col gap-3 animate-slide-in-right delay-400">
           <div className="flex-[1] min-h-0">
             <ErrorBoundary>
               <InteractionRadar />

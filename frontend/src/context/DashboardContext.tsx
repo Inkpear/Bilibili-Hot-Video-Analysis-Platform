@@ -5,9 +5,11 @@ import type { WordCloudSource } from '../types';
 interface DashboardState {
   selectedBvid: string | null;
   selectedCategory: string | null;
+  selectedWord: string | null;
   wordCloudSource: WordCloudSource;
   setSelectedBvid: (bvid: string | null) => void;
   setSelectedCategory: (category: string | null) => void;
+  setSelectedWord: (word: string | null) => void;
   setWordCloudSource: (source: WordCloudSource) => void;
 }
 
@@ -16,6 +18,7 @@ const DashboardContext = createContext<DashboardState | null>(null);
 export function DashboardProvider({ children }: { children: ReactNode }) {
   const [selectedBvid, setSelectedBvid] = useState<string | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [selectedWord, setSelectedWord] = useState<string | null>(null);
   const [wordCloudSource, setWordCloudSource] = useState<WordCloudSource>('title');
 
   const handleSetSelectedBvid = useCallback((bvid: string | null) => {
@@ -24,6 +27,11 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
 
   const handleSetSelectedCategory = useCallback((category: string | null) => {
     setSelectedCategory(category);
+    setSelectedWord(null);
+  }, []);
+
+  const handleSetSelectedWord = useCallback((word: string | null) => {
+    setSelectedWord((prev) => (prev === word ? null : word));
   }, []);
 
   const handleSetWordCloudSource = useCallback((source: WordCloudSource) => {
@@ -35,9 +43,11 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       value={{
         selectedBvid,
         selectedCategory,
+        selectedWord,
         wordCloudSource,
         setSelectedBvid: handleSetSelectedBvid,
         setSelectedCategory: handleSetSelectedCategory,
+        setSelectedWord: handleSetSelectedWord,
         setWordCloudSource: handleSetWordCloudSource,
       }}
     >

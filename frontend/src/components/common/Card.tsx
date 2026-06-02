@@ -21,16 +21,17 @@ export default function Card({ title, extra, children, className = '', style, sp
       }}
     >
       {(title || extra) && (
-        <div className="flex items-center justify-between px-4 py-3 border-b border-border-default">
+        <div className="flex items-center justify-between px-4 py-2.5 border-b border-border-default shrink-0">
           {title && (
-            <h3 className="font-display text-sm tracking-wider text-text-secondary uppercase">
+            <h3 className="font-display text-xs tracking-wider text-text-secondary uppercase flex items-center gap-2">
+              <span className="w-1 h-3 bg-bili-blue rounded-full" />
               {title}
             </h3>
           )}
           {extra && <div className="flex items-center gap-2">{extra}</div>}
         </div>
       )}
-      <div className="flex-1 p-4 min-h-0">{children}</div>
+      <div className="flex-1 p-3 min-h-0">{children}</div>
     </div>
   );
 }

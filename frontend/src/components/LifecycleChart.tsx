@@ -94,24 +94,33 @@ export default function LifecycleChart() {
     } as EChartsOption
   }, [videos, allDates, metric])
 
+  const selectedTitle = selectedBvid && singleData.data ? singleData.data.title.slice(0, 12) : null
+
   const extra = (
-    <div className="flex gap-1">
-      {[
-        { value: 'view_count' as const, label: '播放量' },
-        { value: 'like_count' as const, label: '点赞数' },
-      ].map((m) => (
-        <button
-          key={m.value}
-          onClick={() => setMetric(m.value)}
-          className={`px-2 py-0.5 text-xs rounded transition-colors ${
-            metric === m.value
-              ? 'bg-bili-blue text-white'
-              : 'text-text-muted hover:text-text-secondary'
-          }`}
-        >
-          {m.label}
-        </button>
-      ))}
+    <div className="flex items-center gap-2">
+      {selectedTitle && (
+        <span className="px-1.5 py-0.5 text-[10px] rounded bg-bili-pink/20 text-bili-pink truncate max-w-[100px]">
+          {selectedTitle}
+        </span>
+      )}
+      <div className="flex gap-1">
+        {[
+          { value: 'view_count' as const, label: '播放量' },
+          { value: 'like_count' as const, label: '点赞数' },
+        ].map((m) => (
+          <button
+            key={m.value}
+            onClick={() => setMetric(m.value)}
+            className={`px-2 py-0.5 text-xs rounded transition-colors ${
+              metric === m.value
+                ? 'bg-bili-blue text-white'
+                : 'text-text-muted hover:text-text-secondary'
+            }`}
+          >
+            {m.label}
+          </button>
+        ))}
+      </div>
     </div>
   )
 
