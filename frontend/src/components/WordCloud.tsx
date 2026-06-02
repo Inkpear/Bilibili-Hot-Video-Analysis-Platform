@@ -1,4 +1,5 @@
 import { useCallback } from 'react'
+import 'echarts-wordcloud'
 import { useApi } from '../hooks/useApi'
 import { fetchWordCloud } from '../api'
 import { useDashboard } from '../context/DashboardContext'

@@ -254,3 +254,33 @@
 .delay-300 { animation-delay: 0.3s; }
 .delay-400 { animation-delay: 0.4s; }
 .delay-500 { animation-delay: 0.5s; }
+
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+@keyframes highlight-row {
+  0% { background-color: rgba(0, 161, 214, 0); }
+  20% { background-color: rgba(0, 161, 214, 0.15); }
+  80% { background-color: rgba(0, 161, 214, 0.15); }
+  100% { background-color: rgba(0, 161, 214, 0); }
+}
+
+.animate-highlight-row {
+  animation: highlight-row 2.8s ease-in-out;
+}
+
+@keyframes slide-highlight {
+  0% { transform: translateX(-100%); opacity: 0; }
+  15% { transform: translateX(0); opacity: 1; }
+  85% { transform: translateX(0); opacity: 1; }
+  100% { transform: translateX(100%); opacity: 0; }
+}
+
+.animate-slide-highlight {
+  animation: slide-highlight 2.8s ease-in-out;
+}

@@ -21,7 +21,6 @@ export default function LifecycleChart() {
   )
 
   const loading = selectedBvid ? singleData.loading : topData.loading
-  const hasLoaded = selectedBvid ? singleData.data !== undefined : topData.data !== undefined
 
   const videos = useMemo(() => {
     if (selectedBvid) {
@@ -35,14 +34,26 @@ export default function LifecycleChart() {
     [videos]
   )
 
+  const hasLegend = videos.length > 1
+
   const option: EChartsOption = useMemo(() => {
     if (!videos.length) return {}
     return {
-      grid: { left: 60, right: 24, top: 32, bottom: 32, containLabel: false },
+      grid: {
+        left: 56,
+        right: 20,
+        top: hasLegend ? 40 : 16,
+        bottom: 36,
+        containLabel: false,
+      },
       legend: {
-        show: videos.length > 1,
-        top: 0,
-        textStyle: { color: '#8B949E', fontSize: 11 },
+        show: hasLegend,
+        top: 4,
+        left: 'center',
+        itemWidth: 12,
+        itemHeight: 8,
+        itemGap: 12,
+        textStyle: { color: '#8B949E', fontSize: 10 },
       },
       tooltip: {
         trigger: 'axis',
@@ -57,23 +68,29 @@ export default function LifecycleChart() {
         type: 'category',
         data: allDates,
         axisLabel: { color: '#8B949E', fontSize: 10, rotate: 30 },
+        boundaryGap: false,
       },
       yAxis: {
         type: 'value',
         name: metric === 'view_count' ? '播放量' : '点赞数',
-        nameTextStyle: { color: '#8B949E' },
+        nameTextStyle: { color: '#8B949E', fontSize: 10, padding: [0, 0, 0, -20] },
         axisLabel: {
           color: '#8B949E',
-          formatter: (v: number) => (v >= 10000 ? v / 10000 + 'w' : String(v)),
+          fontSize: 10,
+          formatter: (v: number) => {
+            if (v >= 100000000) return (v / 100000000).toFixed(0) + '亿'
+            if (v >= 10000) return (v / 10000).toFixed(0) + 'w'
+            return String(v)
+          },
         },
         splitLine: { lineStyle: { color: '#21262D', type: 'dashed' } },
       },
       series: videos.map((v, i) => ({
-        name: v.title.slice(0, 15),
+        name: v.title.slice(0, 10),
         type: 'line' as const,
         smooth: true,
         symbol: 'circle',
-        symbolSize: 6,
+        symbolSize: 5,
         lineStyle: { color: COLORS[i % COLORS.length], width: 2 },
         itemStyle: { color: COLORS[i % COLORS.length] },
         areaStyle: {
@@ -92,9 +109,10 @@ export default function LifecycleChart() {
         }),
       })),
     } as EChartsOption
-  }, [videos, allDates, metric])
+  }, [videos, allDates, metric, hasLegend])
 
   const selectedTitle = selectedBvid && singleData.data ? singleData.data.title.slice(0, 12) : null
+  const noLifecycleData = selectedBvid && !loading && !singleData.data
 
   const extra = (
     <div className="flex items-center gap-2">
@@ -124,18 +142,21 @@ export default function LifecycleChart() {
     </div>
   )
 
-  const showEmpty = !loading && hasLoaded && !videos.length
-
   return (
     <Card title="生命周期" extra={extra} className="h-full">
-      {showEmpty ? (
+      {loading ? (
+        <Loading rows={5} />
+      ) : videos.length > 0 ? (
+        <ChartWrapper option={option} />
+      ) : noLifecycleData ? (
+        <div className="flex flex-col items-center justify-center h-full gap-2 text-text-muted text-sm">
+          <span>该视频暂无生命周期数据</span>
+          <span className="text-xs">（需要多轮采集后才有趋势）</span>
+        </div>
+      ) : (
         <div className="flex items-center justify-center h-full text-text-muted text-sm">
           选择视频查看生命周期趋势
         </div>
-      ) : loading ? (
-        <Loading rows={5} />
-      ) : (
-        <ChartWrapper option={option} />
       )}
     </Card>
   )
