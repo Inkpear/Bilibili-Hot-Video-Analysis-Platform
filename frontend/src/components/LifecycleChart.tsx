@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect, useRef } from 'react'
 import { useApi } from '../hooks/useApi'
 import { fetchLifecycleTop, fetchLifecycle } from '../api'
 import { useDashboard } from '../context/DashboardContext'
@@ -10,9 +10,36 @@ import type { EChartsOption } from 'echarts'
 
 const COLORS = ['#00A1D6', '#FB7299', '#39D353', '#F0883E', '#A371F7']
 
+type MetricKey = 'view_count' | 'like_count'
+
 export default function LifecycleChart() {
-  const { selectedBvid } = useDashboard()
-  const [metric, setMetric] = useState<'view_count' | 'like_count'>('view_count')
+  const { selectedBvid, carousel } = useDashboard()
+  const [metric, setMetric] = useState<MetricKey>('view_count')
+
+  const metricShownRef = useRef({ view: false, like: false })
+  const switchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    if (!carousel.on || !selectedBvid) {
+      if (switchTimerRef.current) clearTimeout(switchTimerRef.current)
+      switchTimerRef.current = null
+      metricShownRef.current = { view: false, like: false }
+      return
+    }
+
+    metricShownRef.current = { view: false, like: false }
+    setMetric('view_count')
+    metricShownRef.current.view = true
+
+    switchTimerRef.current = setTimeout(() => {
+      setMetric('like_count')
+      metricShownRef.current.like = true
+    }, 5000)
+
+    return () => {
+      if (switchTimerRef.current) clearTimeout(switchTimerRef.current)
+    }
+  }, [carousel.on, selectedBvid])
 
   const topData = useApi(() => fetchLifecycleTop(5), [])
   const singleData = useApi(
@@ -129,20 +156,23 @@ export default function LifecycleChart() {
         </span>
       )}
       <div className="flex gap-1">
-        {[
-          { value: 'view_count' as const, label: '播放量' },
-          { value: 'like_count' as const, label: '点赞数' },
-        ].map((m) => (
+        {([
+          { value: 'view_count' as MetricKey, label: '播放量', key: 'view' },
+          { value: 'like_count' as MetricKey, label: '点赞数', key: 'like' },
+        ]).map((m) => (
           <button
             key={m.value}
-            onClick={() => setMetric(m.value)}
+            onClick={() => { if (!carousel.on) setMetric(m.value) }}
             className={`px-2 py-0.5 text-xs rounded transition-colors ${
               metric === m.value
                 ? 'bg-bili-blue text-white'
                 : 'text-text-muted hover:text-text-secondary'
-            }`}
+            } ${carousel.on ? 'opacity-50 cursor-not-allowed' : ''}`}
           >
             {m.label}
+            {carousel.on && metricShownRef.current[m.key as keyof typeof metricShownRef.current] && (
+              <span className="ml-1 text-positive">✓</span>
+            )}
           </button>
         ))}
       </div>
