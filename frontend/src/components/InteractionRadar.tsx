@@ -33,14 +33,24 @@ export default function InteractionRadar() {
     return null
   }, [selectedBvid, singleData.data, maxData.data])
 
+  const maxRates = useMemo(() => {
+    if (!maxData.data) return null
+    return [maxData.data.max_like_rate, maxData.data.max_coin_rate, maxData.data.max_fav_rate, maxData.data.max_reply_rate, maxData.data.max_share_rate]
+  }, [maxData.data])
+
   const option: EChartsOption = useMemo(() => {
     if (!rates) return {}
 
+    const isOverview = !selectedBvid
     const scaledValues = rates.map((v) => v * COEFFICIENT)
-    const indicator = rates.map((v, i) => ({
-      name: LABELS[i],
-      max: Math.max(Math.ceil(v * COEFFICIENT * 1.5 * 100) / 100, 0.5),
-    }))
+
+    const indicator = rates.map((v, i) => {
+      if (isOverview) {
+        return { name: LABELS[i], max: v * COEFFICIENT }
+      }
+      const m = maxRates ? maxRates[i] : v
+      return { name: LABELS[i], max: Math.max(m * COEFFICIENT * 1.2, 0.5) }
+    })
 
     return {
       radar: {
@@ -54,7 +64,7 @@ export default function InteractionRadar() {
       tooltip: {
         trigger: 'item',
         formatter: () => {
-          const prefix = selectedBvid ? '' : '样本最大 '
+          const prefix = isOverview ? '样本最大 ' : ''
           return rates.map((v, i) => `${prefix}${LABELS[i]}: ${formatPercent(v)}`).join('<br/>')
         },
       },
@@ -65,13 +75,13 @@ export default function InteractionRadar() {
             {
               value: scaledValues,
               areaStyle: {
-                color: selectedBvid ? 'rgba(0, 161, 214, 0.25)' : 'rgba(251, 114, 153, 0.2)',
+                color: isOverview ? 'rgba(251, 114, 153, 0.25)' : 'rgba(0, 161, 214, 0.25)',
               },
               lineStyle: {
-                color: selectedBvid ? '#00A1D6' : '#FB7299',
+                color: isOverview ? '#FB7299' : '#00A1D6',
                 width: 2,
               },
-              itemStyle: { color: selectedBvid ? '#00A1D6' : '#FB7299' },
+              itemStyle: { color: isOverview ? '#FB7299' : '#00A1D6' },
               symbol: 'circle',
               symbolSize: 6,
             },
@@ -79,7 +89,7 @@ export default function InteractionRadar() {
         },
       ],
     } as EChartsOption
-  }, [rates, selectedBvid])
+  }, [rates, maxRates, selectedBvid])
 
   const colors = selectedBvid
     ? ['#00A1D6', '#FB7299', '#39D353', '#F0883E', '#A371F7']
