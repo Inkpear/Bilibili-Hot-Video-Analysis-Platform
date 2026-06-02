@@ -12,6 +12,7 @@ import type {
   WordCloudSource,
   HotCommentsData,
   InteractionData,
+  InteractionMaxData,
 } from '../types';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || '';
@@ -88,9 +89,10 @@ export function fetchPartitionDetail(category: string) {
   return get<PartitionDetailData>('/api/partition-detail', { category });
 }
 
-export function fetchWordCloud(source: WordCloudSource = 'title', category?: string) {
+export function fetchWordCloud(source: WordCloudSource = 'title', category?: string, bvid?: string) {
   const params: Record<string, string> = { source };
   if (category) params.category = category;
+  if (bvid) params.bvid = bvid;
   return get<WordCloudData>('/api/word-cloud', params);
 }
 
@@ -103,4 +105,8 @@ export function fetchHotComments(category?: string, bvid?: string, limit = 20) {
 
 export function fetchInteraction(bvid: string) {
   return get<InteractionData>('/api/interaction', { bvid });
+}
+
+export function fetchInteractionMax() {
+  return get<InteractionMaxData>('/api/interaction-max');
 }

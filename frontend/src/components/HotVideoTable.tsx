@@ -24,12 +24,11 @@ export default function HotVideoTable() {
   const [loadingMore, setLoadingMore] = useState(false)
 
   const { data, loading } = useApi(() => fetchHotVideos(sort, PAGE_SIZE, 0), [sort])
-  const { selectedBvid, setSelectedBvid, selectedCategory, selectedWord } = useDashboard()
+  const { selectedBvid, setSelectedBvid, selectedCategory, selectedWord, carouselOn, setCarouselOn } = useDashboard()
 
   const scrollRef = useRef<HTMLDivElement>(null)
   const sentinelRef = useRef<HTMLDivElement>(null)
   const carouselRef = useRef<ReturnType<typeof setInterval> | null>(null)
-  const [carouselOn, setCarouselOn] = useState(false)
   const [carouselIdx, setCarouselIdx] = useState(0)
 
   useEffect(() => {

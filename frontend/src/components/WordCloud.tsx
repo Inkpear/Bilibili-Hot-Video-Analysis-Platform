@@ -1,4 +1,4 @@
-import { useCallback } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import 'echarts-wordcloud'
 import { useApi } from '../hooks/useApi'
 import { fetchWordCloud } from '../api'
@@ -15,11 +15,38 @@ const SOURCE_LABELS: Record<WordCloudSource, string> = {
   danmaku: '弹幕',
 }
 
+const CAROUSEL_SOURCES: WordCloudSource[] = ['comment', 'danmaku']
+
 export default function WordCloud() {
-  const { selectedCategory, selectedWord, setSelectedWord, wordCloudSource, setWordCloudSource } = useDashboard()
+  const { selectedCategory, selectedBvid, selectedWord, setSelectedWord, wordCloudSource, setWordCloudSource, carouselOn } = useDashboard()
+
+  const sourceTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const sourceIdxRef = useRef(0)
+
+  useEffect(() => {
+    if (carouselOn && selectedBvid) {
+      sourceIdxRef.current = 0
+      setWordCloudSource('comment')
+      sourceTimerRef.current = setInterval(() => {
+        sourceIdxRef.current = (sourceIdxRef.current + 1) % CAROUSEL_SOURCES.length
+        setWordCloudSource(CAROUSEL_SOURCES[sourceIdxRef.current])
+      }, 6000)
+      return () => {
+        if (sourceTimerRef.current) clearInterval(sourceTimerRef.current)
+      }
+    }
+    if (!carouselOn) {
+      if (sourceTimerRef.current) clearInterval(sourceTimerRef.current)
+      sourceTimerRef.current = null
+    }
+  }, [carouselOn, selectedBvid, setWordCloudSource])
+
+  const categoryParam = selectedCategory ?? undefined
+  const bvidParam = selectedBvid ?? undefined
+
   const { data, loading } = useApi(
-    () => fetchWordCloud(wordCloudSource, selectedCategory ?? undefined),
-    [wordCloudSource, selectedCategory]
+    () => fetchWordCloud(wordCloudSource, categoryParam, bvidParam),
+    [wordCloudSource, categoryParam, bvidParam]
   )
 
   const hasWords = (data?.words?.length ?? 0) > 0
@@ -88,12 +115,12 @@ export default function WordCloud() {
         {(['title', 'comment', 'danmaku'] as const).map((s) => (
           <button
             key={s}
-            onClick={() => setWordCloudSource(s)}
+            onClick={() => { if (!carouselOn) setWordCloudSource(s) }}
             className={`px-2 py-0.5 text-xs rounded transition-colors ${
               wordCloudSource === s
                 ? 'bg-bili-blue text-white'
                 : 'text-text-muted hover:text-text-secondary'
-            }`}
+            } ${carouselOn ? 'opacity-50 cursor-not-allowed' : ''}`}
           >
             {SOURCE_LABELS[s]}
           </button>
@@ -110,7 +137,7 @@ export default function WordCloud() {
         <ChartWrapper option={option} onEvents={{ click: handleChartClick }} />
       ) : (
         <div className="flex items-center justify-center h-full text-text-muted text-sm">
-          暂无词云数据
+          {selectedBvid ? '暂无词云数据' : '选择视频查看词云'}
         </div>
       )}
     </Card>

@@ -1,3 +1,4 @@
+import { useRef, useEffect } from 'react'
 import { useApi } from '../hooks/useApi'
 import { fetchHotComments } from '../api'
 import { useDashboard } from '../context/DashboardContext'
@@ -6,18 +7,46 @@ import Card from './common/Card'
 import Loading from './common/Loading'
 
 export default function HotComments() {
-  const { selectedCategory, selectedBvid } = useDashboard()
+  const { selectedCategory, selectedBvid, carouselOn } = useDashboard()
   const { data, loading } = useApi(
-    () => fetchHotComments(selectedCategory ?? undefined, selectedBvid ?? undefined, 15),
+    () => fetchHotComments(selectedCategory ?? undefined, selectedBvid ?? undefined, 20),
     [selectedCategory, selectedBvid]
   )
+
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const scrollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  useEffect(() => {
+    if (carouselOn && data && data.comments.length > 0) {
+      let scrollTop = 0
+      const el = scrollRef.current
+      if (!el) return
+
+      scrollTimerRef.current = setInterval(() => {
+        if (!el) return
+        scrollTop += 1
+        el.scrollTop = scrollTop
+        if (scrollTop >= el.scrollHeight - el.clientHeight) {
+          scrollTop = 0
+        }
+      }, 50)
+
+      return () => {
+        if (scrollTimerRef.current) clearInterval(scrollTimerRef.current)
+      }
+    }
+    if (!carouselOn) {
+      if (scrollTimerRef.current) clearInterval(scrollTimerRef.current)
+      scrollTimerRef.current = null
+    }
+  }, [carouselOn, data])
 
   return (
     <Card title="热门评论" className="h-full">
       {loading ? (
         <Loading rows={6} />
       ) : (
-        <div className="flex flex-col gap-2 overflow-auto min-h-0 h-full">
+        <div ref={scrollRef} className="flex flex-col gap-2 overflow-auto min-h-0 h-full scrollbar-hide">
           {data?.comments.map((c, i) => (
             <div
               key={`${c.bvid}-${i}`}

@@ -55,6 +55,10 @@ async fn main() {
         .route(
             "/api/interaction",
             axum::routing::get(handlers::interaction),
+        )
+        .route(
+            "/api/interaction-max",
+            axum::routing::get(handlers::interaction_max),
         );
 
     let app = Router::new()

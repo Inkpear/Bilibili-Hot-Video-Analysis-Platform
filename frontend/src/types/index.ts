@@ -142,3 +142,11 @@ export interface InteractionData {
   reply_rate: number;
   share_rate: number;
 }
+
+export interface InteractionMaxData {
+  max_like_rate: number;
+  max_coin_rate: number;
+  max_fav_rate: number;
+  max_reply_rate: number;
+  max_share_rate: number;
+}

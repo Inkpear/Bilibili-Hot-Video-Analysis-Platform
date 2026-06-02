@@ -382,6 +382,38 @@ impl From<InteractionRow> for InteractionData {
     }
 }
 
+// ---- /api/interaction-max ----
+
+#[derive(Debug, Serialize)]
+pub struct InteractionMaxData {
+    pub max_like_rate: f64,
+    pub max_coin_rate: f64,
+    pub max_fav_rate: f64,
+    pub max_reply_rate: f64,
+    pub max_share_rate: f64,
+}
+
+#[derive(Debug, sqlx::FromRow)]
+pub struct InteractionMaxRow {
+    pub max_like_rate: Option<f64>,
+    pub max_coin_rate: Option<f64>,
+    pub max_fav_rate: Option<f64>,
+    pub max_reply_rate: Option<f64>,
+    pub max_share_rate: Option<f64>,
+}
+
+impl From<InteractionMaxRow> for InteractionMaxData {
+    fn from(row: InteractionMaxRow) -> Self {
+        Self {
+            max_like_rate: row.max_like_rate.unwrap_or(0.0),
+            max_coin_rate: row.max_coin_rate.unwrap_or(0.0),
+            max_fav_rate: row.max_fav_rate.unwrap_or(0.0),
+            max_reply_rate: row.max_reply_rate.unwrap_or(0.0),
+            max_share_rate: row.max_share_rate.unwrap_or(0.0),
+        }
+    }
+}
+
 // ---- /api/word-cloud ----
 
 #[derive(Debug, Serialize)]

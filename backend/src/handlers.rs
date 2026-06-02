@@ -499,3 +499,22 @@ pub async fn interaction(
         None => Ok(Json(ApiResponse::ok(None))),
     }
 }
+
+pub async fn interaction_max(
+    State(pool): State<MySqlPool>,
+) -> Result<Json<ApiResponse<InteractionMaxData>>, AppError> {
+    let row = sqlx::query_as!(
+        InteractionMaxRow,
+        r#"SELECT
+            CAST(MAX(CASE WHEN view_count > 0 THEN like_count / view_count ELSE 0 END) AS DOUBLE) AS `max_like_rate: f64`,
+            CAST(MAX(CASE WHEN view_count > 0 THEN coin_count / view_count ELSE 0 END) AS DOUBLE) AS `max_coin_rate: f64`,
+            CAST(MAX(CASE WHEN view_count > 0 THEN favorite_count / view_count ELSE 0 END) AS DOUBLE) AS `max_fav_rate: f64`,
+            CAST(MAX(CASE WHEN view_count > 0 THEN reply_count / view_count ELSE 0 END) AS DOUBLE) AS `max_reply_rate: f64`,
+            CAST(MAX(CASE WHEN view_count > 0 THEN share_count / view_count ELSE 0 END) AS DOUBLE) AS `max_share_rate: f64`
+        FROM ads_hot_video_rank"#
+    )
+    .fetch_one(&pool)
+    .await?;
+
+    Ok(Json(ApiResponse::ok(InteractionMaxData::from(row))))
+}

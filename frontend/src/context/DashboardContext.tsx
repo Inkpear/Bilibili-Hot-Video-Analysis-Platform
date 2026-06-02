@@ -7,10 +7,12 @@ interface DashboardState {
   selectedCategory: string | null;
   selectedWord: string | null;
   wordCloudSource: WordCloudSource;
+  carouselOn: boolean;
   setSelectedBvid: (bvid: string | null) => void;
   setSelectedCategory: (category: string | null) => void;
   setSelectedWord: (word: string | null) => void;
   setWordCloudSource: (source: WordCloudSource) => void;
+  setCarouselOn: (on: boolean) => void;
 }
 
 const DashboardContext = createContext<DashboardState | null>(null);
@@ -20,6 +22,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [selectedWord, setSelectedWord] = useState<string | null>(null);
   const [wordCloudSource, setWordCloudSource] = useState<WordCloudSource>('title');
+  const [carouselOn, setCarouselOn] = useState(false);
 
   const handleSetSelectedBvid = useCallback((bvid: string | null) => {
     setSelectedBvid(bvid);
@@ -45,10 +48,12 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
         selectedCategory,
         selectedWord,
         wordCloudSource,
+        carouselOn,
         setSelectedBvid: handleSetSelectedBvid,
         setSelectedCategory: handleSetSelectedCategory,
         setSelectedWord: handleSetSelectedWord,
         setWordCloudSource: handleSetWordCloudSource,
+        setCarouselOn,
       }}
     >
       {children}
