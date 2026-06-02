@@ -23,6 +23,44 @@ echo "================================================"
 echo "  数据管线 ETL — $(date '+%Y-%m-%d %H:%M:%S')"
 echo "================================================"
 
+# Step 0: 健康检查 — 确保 HDFS、Hive Metastore、HiveServer2 可用
+echo ""
+echo "[0/4] 集群健康检查..."
+
+check_port() {
+    local host="$1" port="$2" name="$3"
+    if ! $SSH_CMD "nc -z ${host} ${port}" 2>/dev/null; then
+        echo "  [WARN] ${name} (port ${port}) 不可达，尝试启动..."
+        return 1
+    fi
+    echo "  [OK] ${name} (port ${port})"
+    return 0
+}
+
+# 检查 HDFS
+if ! $SSH_CMD "hdfs dfsadmin -report" >/dev/null 2>&1; then
+    echo "  [WARN] HDFS 不可用，尝试重启..."
+    $SSH_CMD "start-dfs.sh" 2>&1 | tail -3
+    sleep 5
+fi
+echo "  [OK] HDFS"
+
+# 检查 Hive Metastore (9083)
+if ! check_port "$MASTER_HOST" 9083 "Hive Metastore"; then
+    $SSH_CMD "sudo systemctl start hive-metastore.service" 2>&1
+    sleep 10
+    check_port "$MASTER_HOST" 9083 "Hive Metastore" || { echo "  [FAIL] Hive Metastore 启动失败"; exit 1; }
+fi
+
+# 检查 HiveServer2 (10000)
+if ! check_port "$MASTER_HOST" 10000 "HiveServer2"; then
+    $SSH_CMD "sudo systemctl start hive-server2.service" 2>&1
+    sleep 30
+    check_port "$MASTER_HOST" 10000 "HiveServer2" || { echo "  [FAIL] HiveServer2 启动失败"; exit 1; }
+fi
+
+echo "  集群健康检查通过"
+
 # Step 1: 上传 NDJSON 到 HDFS
 echo ""
 echo "[1/4] 上传 NDJSON 到 HDFS..."
