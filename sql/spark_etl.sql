@@ -10,7 +10,7 @@ USE bilibili;
 -- Stage 4: DWD 清洗层
 -- ============================================================================
 
--- 4.1 视频快照表（按 snapshot_date 分区，去重）
+-- 4.1 视频快照表（按 snapshot_date 分区，去重，只保留近30天视频）
 DROP TABLE IF EXISTS dwd_video_snapshot;
 CREATE TABLE dwd_video_snapshot (
     bvid            STRING,
@@ -59,10 +59,11 @@ FROM (
       AND title IS NOT NULL
       AND view_count IS NOT NULL
       AND view_count >= 0
+      AND publish_time >= UNIX_TIMESTAMP(DATE_SUB(CURRENT_DATE(), 30))
 ) t
 WHERE t.rn = 1;
 
--- 4.2 视频基础信息表（按 bvid 唯一，canonical 优先级）
+-- 4.2 视频基础信息表（按 bvid 唯一，canonical 优先级，只保留近30天）
 DROP TABLE IF EXISTS dwd_video_info;
 CREATE TABLE dwd_video_info (
     bvid            STRING,
@@ -113,10 +114,11 @@ FROM (
     FROM ods_rank_video_raw
     WHERE bvid IS NOT NULL
       AND title IS NOT NULL
+      AND publish_time >= UNIX_TIMESTAMP(DATE_SUB(CURRENT_DATE(), 30))
 ) t
 WHERE t.rn = 1;
 
--- 4.3 评论明细表
+-- 4.3 评论明细表（只保留近30天视频的评论）
 DROP TABLE IF EXISTS dwd_comment_info;
 CREATE TABLE dwd_comment_info (
     comment_id      BIGINT,
@@ -144,27 +146,28 @@ SELECT
     comment_time
 FROM (
     SELECT
-        comment_id,
-        bvid,
-        aid,
-        user_id,
-        user_name,
-        content,
-        COALESCE(like_count, 0) AS like_count,
-        COALESCE(reply_count, 0) AS reply_count,
-        CAST(FROM_UNIXTIME(CAST(comment_time AS BIGINT)) AS TIMESTAMP) AS comment_time,
+        c.comment_id,
+        c.bvid,
+        c.aid,
+        c.user_id,
+        c.user_name,
+        c.content,
+        COALESCE(c.like_count, 0) AS like_count,
+        COALESCE(c.reply_count, 0) AS reply_count,
+        CAST(FROM_UNIXTIME(CAST(c.comment_time AS BIGINT)) AS TIMESTAMP) AS comment_time,
         ROW_NUMBER() OVER (
-            PARTITION BY comment_id
-            ORDER BY CAST(comment_time AS BIGINT) DESC
+            PARTITION BY c.comment_id
+            ORDER BY CAST(c.comment_time AS BIGINT) DESC
         ) AS rn
-    FROM ods_video_comment_raw
-    WHERE content IS NOT NULL
-      AND content != ''
-      AND bvid IS NOT NULL
+    FROM ods_video_comment_raw c
+    INNER JOIN dwd_video_info v ON c.bvid = v.bvid
+    WHERE c.content IS NOT NULL
+      AND c.content != ''
+      AND c.bvid IS NOT NULL
 ) t
 WHERE t.rn = 1;
 
--- 4.4 弹幕明细表
+-- 4.4 弹幕明细表（只保留近30天视频的弹幕）
 DROP TABLE IF EXISTS dwd_danmaku_info;
 CREATE TABLE dwd_danmaku_info (
     danmaku_id      BIGINT,
@@ -194,24 +197,25 @@ SELECT
     send_time
 FROM (
     SELECT
-        danmaku_id,
-        bvid,
-        cid,
-        content,
-        video_time,
-        mode,
-        fontsize,
-        color,
-        mid_hash,
-        CAST(FROM_UNIXTIME(CAST(send_time AS BIGINT)) AS TIMESTAMP) AS send_time,
+        d.danmaku_id,
+        d.bvid,
+        d.cid,
+        d.content,
+        d.video_time,
+        d.mode,
+        d.fontsize,
+        d.color,
+        d.mid_hash,
+        CAST(FROM_UNIXTIME(CAST(d.send_time AS BIGINT)) AS TIMESTAMP) AS send_time,
         ROW_NUMBER() OVER (
-            PARTITION BY danmaku_id
-            ORDER BY CAST(send_time AS BIGINT) DESC
+            PARTITION BY d.danmaku_id
+            ORDER BY CAST(d.send_time AS BIGINT) DESC
         ) AS rn
-    FROM ods_video_danmaku_raw
-    WHERE content IS NOT NULL
-      AND content != ''
-      AND bvid IS NOT NULL
+    FROM ods_video_danmaku_raw d
+    INNER JOIN dwd_video_info v ON d.bvid = v.bvid
+    WHERE d.content IS NOT NULL
+      AND d.content != ''
+      AND d.bvid IS NOT NULL
 ) t
 WHERE t.rn = 1;
 
