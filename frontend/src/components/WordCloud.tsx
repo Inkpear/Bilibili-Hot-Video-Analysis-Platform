@@ -18,35 +18,35 @@ const SOURCE_LABELS: Record<WordCloudSource, string> = {
 export default function WordCloud() {
   const {
     selectedCategory, selectedBvid, selectedWord, setSelectedWord,
-    wordCloudSource, setWordCloudSource, carouselOn, setReadyToSwitch,
+    wordCloudSource, setWordCloudSource, carousel, markWordCloudShown,
   } = useDashboard()
 
-  const sourceTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
-  const sourceIdxRef = useRef(0)
+  const switchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
-    if (carouselOn && selectedBvid) {
-      sourceIdxRef.current = 0
-      setWordCloudSource('comment')
-
-      sourceTimerRef.current = setInterval(() => {
-        sourceIdxRef.current = (sourceIdxRef.current + 1) % 2
-        const next = sourceIdxRef.current === 0 ? 'comment' : 'danmaku'
-        setWordCloudSource(next)
-        if (sourceIdxRef.current === 1) {
-          setReadyToSwitch(true)
-        }
-      }, 8000)
-
-      return () => {
-        if (sourceTimerRef.current) clearInterval(sourceTimerRef.current)
-      }
+    if (!carousel.on || !selectedBvid) {
+      if (switchTimerRef.current) clearTimeout(switchTimerRef.current)
+      switchTimerRef.current = null
+      return
     }
-    if (!carouselOn) {
-      if (sourceTimerRef.current) clearInterval(sourceTimerRef.current)
-      sourceTimerRef.current = null
+
+    const { commentShown, danmakuShown } = carousel.wordCloud
+    if (commentShown && danmakuShown) return
+
+    const currentSource = commentShown && !danmakuShown ? 'danmaku' : 'comment'
+    setWordCloudSource(currentSource)
+    markWordCloudShown(currentSource)
+
+    switchTimerRef.current = setTimeout(() => {
+      const nextSource: WordCloudSource = currentSource === 'comment' ? 'danmaku' : 'comment'
+      setWordCloudSource(nextSource)
+      markWordCloudShown(nextSource)
+    }, 5000)
+
+    return () => {
+      if (switchTimerRef.current) clearTimeout(switchTimerRef.current)
     }
-  }, [carouselOn, selectedBvid, setWordCloudSource, setReadyToSwitch])
+  }, [carousel.on, selectedBvid, carousel.wordCloud.commentShown, carousel.wordCloud.danmakuShown]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const hideTitleCloud = !!selectedBvid
   const effectiveSource: WordCloudSource = hideTitleCloud ? wordCloudSource : 'title'
@@ -109,6 +109,8 @@ export default function WordCloud() {
       } as EChartsOption)
     : {}
 
+  const wcDone = carousel.on && carousel.wordCloud.commentShown && carousel.wordCloud.danmakuShown
+
   const extra = hideTitleCloud
     ? (
       <div className="flex items-center gap-2">
@@ -124,16 +126,22 @@ export default function WordCloud() {
           {(['comment', 'danmaku'] as const).map((s) => (
             <button
               key={s}
-              onClick={() => { if (!carouselOn) setWordCloudSource(s) }}
+              onClick={() => { if (!carousel.on) setWordCloudSource(s) }}
               className={`px-2 py-0.5 text-xs rounded transition-colors ${
                 wordCloudSource === s
                   ? 'bg-bili-blue text-white'
                   : 'text-text-muted hover:text-text-secondary'
-              } ${carouselOn ? 'opacity-50 cursor-not-allowed' : ''}`}
+              } ${carousel.on ? 'opacity-50 cursor-not-allowed' : ''}`}
             >
               {SOURCE_LABELS[s]}
+              {carousel.on && carousel.wordCloud[`${s}Shown`] && (
+                <span className="ml-1 text-positive">✓</span>
+              )}
             </button>
           ))}
+          {wcDone && (
+            <span className="px-1.5 py-0.5 text-[10px] rounded bg-positive/20 text-positive">完成</span>
+          )}
         </div>
       </div>
     )

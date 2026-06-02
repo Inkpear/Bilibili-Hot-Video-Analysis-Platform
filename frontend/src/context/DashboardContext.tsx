@@ -2,21 +2,39 @@ import { createContext, useContext, useState, useCallback, useRef } from 'react'
 import type { ReactNode } from 'react';
 import type { WordCloudSource } from '../types';
 
+export interface CarouselState {
+  on: boolean;
+  wordCloud: {
+    commentShown: boolean;
+    danmakuShown: boolean;
+    currentSource: WordCloudSource;
+  };
+  commentsEnded: boolean;
+}
+
 interface DashboardState {
   selectedBvid: string | null;
   selectedCategory: string | null;
   selectedWord: string | null;
   wordCloudSource: WordCloudSource;
-  carouselOn: boolean;
+  carousel: CarouselState;
   setSelectedBvid: (bvid: string | null) => void;
   setSelectedCategory: (category: string | null) => void;
   setSelectedWord: (word: string | null) => void;
   setWordCloudSource: (source: WordCloudSource) => void;
-  setCarouselOn: (on: boolean) => void;
-  requestNextVideo: () => void;
-  setReadyToSwitch: (ready: boolean) => void;
-  readyToSwitchRef: React.MutableRefObject<boolean>;
+  startCarousel: () => void;
+  stopCarousel: () => void;
+  markWordCloudShown: (source: WordCloudSource) => void;
+  markCommentsEnded: () => void;
+  advanceCarousel: () => void;
+  carouselAdvanceRef: React.MutableRefObject<(() => void) | null>;
 }
+
+const CAROUSEL_INITIAL: CarouselState = {
+  on: false,
+  wordCloud: { commentShown: false, danmakuShown: false, currentSource: 'comment' },
+  commentsEnded: false,
+};
 
 const DashboardContext = createContext<DashboardState | null>(null);
 
@@ -25,10 +43,8 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [selectedWord, setSelectedWord] = useState<string | null>(null);
   const [wordCloudSource, setWordCloudSource] = useState<WordCloudSource>('title');
-  const [carouselOn, setCarouselOn] = useState(false);
-
-  const readyToSwitchRef = useRef(false);
-  const requestNextRef = useRef<(() => void) | null>(null);
+  const [carousel, setCarousel] = useState<CarouselState>(CAROUSEL_INITIAL);
+  const carouselAdvanceRef = useRef<(() => void) | null>(null);
 
   const handleSetSelectedBvid = useCallback((bvid: string | null) => {
     setSelectedBvid(bvid);
@@ -47,15 +63,45 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     setWordCloudSource(source);
   }, []);
 
-  const requestNextVideo = useCallback(() => {
-    if (requestNextRef.current) {
-      requestNextRef.current();
-    }
+  const startCarousel = useCallback(() => {
+    setCarousel({
+      on: true,
+      wordCloud: { commentShown: false, danmakuShown: false, currentSource: 'comment' },
+      commentsEnded: false,
+    });
+    setWordCloudSource('comment');
+  }, [setWordCloudSource]);
+
+  const stopCarousel = useCallback(() => {
+    setCarousel(CAROUSEL_INITIAL);
   }, []);
 
-  const setReadyToSwitch = useCallback((ready: boolean) => {
-    readyToSwitchRef.current = ready;
+  const markWordCloudShown = useCallback((source: WordCloudSource) => {
+    setCarousel((prev) => ({
+      ...prev,
+      wordCloud: {
+        ...prev.wordCloud,
+        commentShown: prev.wordCloud.commentShown || source === 'comment',
+        danmakuShown: prev.wordCloud.danmakuShown || source === 'danmaku',
+      },
+    }));
   }, []);
+
+  const markCommentsEnded = useCallback(() => {
+    setCarousel((prev) => ({ ...prev, commentsEnded: true }));
+  }, []);
+
+  const advanceCarousel = useCallback(() => {
+    if (carouselAdvanceRef.current) {
+      carouselAdvanceRef.current();
+    }
+    setCarousel({
+      on: true,
+      wordCloud: { commentShown: false, danmakuShown: false, currentSource: 'comment' },
+      commentsEnded: false,
+    });
+    setWordCloudSource('comment');
+  }, [setWordCloudSource]);
 
   return (
     <DashboardContext.Provider
@@ -64,15 +110,17 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
         selectedCategory,
         selectedWord,
         wordCloudSource,
-        carouselOn,
+        carousel,
         setSelectedBvid: handleSetSelectedBvid,
         setSelectedCategory: handleSetSelectedCategory,
         setSelectedWord: handleSetSelectedWord,
         setWordCloudSource: handleSetWordCloudSource,
-        setCarouselOn,
-        requestNextVideo,
-        setReadyToSwitch,
-        readyToSwitchRef,
+        startCarousel,
+        stopCarousel,
+        markWordCloudShown,
+        markCommentsEnded,
+        advanceCarousel,
+        carouselAdvanceRef,
       }}
     >
       {children}

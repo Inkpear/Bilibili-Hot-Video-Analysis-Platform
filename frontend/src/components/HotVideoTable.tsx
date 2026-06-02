@@ -15,7 +15,7 @@ const SORT_OPTIONS: { value: HotVideosSort; label: string }[] = [
 ]
 
 const PAGE_SIZE = 20
-const MAX_VIDEO_TIME = 15000
+const MAX_VIDEO_MS = 20000
 
 export default function HotVideoTable() {
   const [sort, setSort] = useState<HotVideosSort>('heat')
@@ -27,13 +27,13 @@ export default function HotVideoTable() {
   const { data, loading } = useApi(() => fetchHotVideos(sort, PAGE_SIZE, 0), [sort])
   const {
     selectedBvid, setSelectedBvid, selectedCategory, selectedWord,
-    carouselOn, setCarouselOn, readyToSwitchRef, setReadyToSwitch,
+    carousel, startCarousel, stopCarousel, advanceCarousel, carouselAdvanceRef,
   } = useDashboard()
 
   const scrollRef = useRef<HTMLDivElement>(null)
   const sentinelRef = useRef<HTMLDivElement>(null)
-  const [carouselIdx, setCarouselIdx] = useState(0)
   const videosRef = useRef<HotVideoItem[]>([])
+  const videoStartRef = useRef<number>(0)
 
   useEffect(() => {
     if (data) {
@@ -84,71 +84,81 @@ export default function HotVideoTable() {
     videosRef.current = videos
   }, [videos])
 
-  const advanceCarousel = useCallback(() => {
-    setCarouselIdx((prev) => {
-      const vids = videosRef.current
-      const next = (prev + 1) % vids.length
-      setSelectedBvid(vids[next]?.bvid ?? null)
-      return next
-    })
-    setReadyToSwitch(false)
-  }, [setSelectedBvid, setReadyToSwitch])
+  const doAdvance = useCallback(() => {
+    const vids = videosRef.current
+    const currentBvid = selectedBvid
+    const currentIdx = vids.findIndex((v) => v.bvid === currentBvid)
+    const next = (currentIdx + 1) % vids.length
+    setSelectedBvid(vids[next]?.bvid ?? null)
+    videoStartRef.current = Date.now()
+  }, [setSelectedBvid, selectedBvid])
 
   useEffect(() => {
-    if (!carouselOn) return
+    carouselAdvanceRef.current = doAdvance
+  }, [doAdvance, carouselAdvanceRef])
 
-    const checkInterval = setInterval(() => {
-      if (readyToSwitchRef.current) {
-        advanceCarousel()
-      }
-    }, 500)
+  useEffect(() => {
+    if (!carousel.on) return
 
-    const maxTimer = setTimeout(() => {
+    const { commentShown, danmakuShown } = carousel.wordCloud
+    const wcDone = commentShown && danmakuShown
+    const commentsDone = carousel.commentsEnded
+
+    if (wcDone && commentsDone) {
       advanceCarousel()
-    }, MAX_VIDEO_TIME)
-
-    return () => {
-      clearInterval(checkInterval)
-      clearTimeout(maxTimer)
-    }
-  }, [carouselOn, selectedBvid, advanceCarousel, readyToSwitchRef])
-
-  const handleCarousel = useCallback(() => {
-    if (carouselOn) {
-      setCarouselOn(false)
-      setCarouselIdx(0)
       return
     }
-    setCarouselOn(true)
-    setCarouselIdx(0)
-    setReadyToSwitch(false)
+
+    const elapsed = Date.now() - videoStartRef.current
+    const remaining = MAX_VIDEO_MS - elapsed
+    if (remaining <= 0) {
+      advanceCarousel()
+      return
+    }
+
+    const timeout = setTimeout(() => {
+      advanceCarousel()
+    }, remaining)
+
+    return () => clearTimeout(timeout)
+  }, [carousel.on, carousel.wordCloud.commentShown, carousel.wordCloud.danmakuShown, carousel.commentsEnded, advanceCarousel])
+
+  const handleToggleCarousel = useCallback(() => {
+    if (carousel.on) {
+      stopCarousel()
+      return
+    }
+    videoStartRef.current = Date.now()
     if (videos.length > 0) {
       setSelectedBvid(videos[0].bvid)
     }
-  }, [carouselOn, videos, setSelectedBvid, setCarouselOn, setReadyToSwitch])
+    startCarousel()
+  }, [carousel.on, videos, setSelectedBvid, startCarousel, stopCarousel])
 
   useEffect(() => {
-    return () => {
-      setCarouselOn(false)
-    }
+    return () => stopCarousel()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const sortLabel = SORT_OPTIONS.find((s) => s.value === sort)?.label ?? '热度'
 
+  const wcDone = carousel.on && carousel.wordCloud.commentShown && carousel.wordCloud.danmakuShown
+
   const extra = (
     <div className="flex items-center gap-2">
       <button
-        onClick={handleCarousel}
+        onClick={handleToggleCarousel}
         className={`flex items-center gap-1 px-2 py-0.5 text-xs rounded transition-all ${
-          carouselOn
-            ? 'bg-bili-pink text-white animate-pulse-glow'
+          carousel.on
+            ? 'bg-bili-pink text-white'
             : 'text-text-muted hover:text-text-secondary border border-border-default hover:border-bili-blue'
         }`}
       >
-        {carouselOn ? (
+        {carousel.on ? (
           <>
             <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
             停止
+            {wcDone && <span className="text-[10px] ml-0.5 opacity-70">词云✓</span>}
+            {carousel.commentsEnded && <span className="text-[10px] ml-0.5 opacity-70">评论✓</span>}
           </>
         ) : (
           <>
@@ -187,10 +197,7 @@ export default function HotVideoTable() {
             </div>
           )}
 
-          <div
-            ref={scrollRef}
-            className="flex-1 overflow-auto min-h-0 scrollbar-hide"
-          >
+          <div ref={scrollRef} className="flex-1 overflow-auto min-h-0 scrollbar-hide">
             <table className="w-full text-xs">
               <thead className="sticky top-0 bg-bg-card z-10">
                 <tr className="text-text-muted border-b border-border-default">
@@ -205,26 +212,22 @@ export default function HotVideoTable() {
               <tbody>
                 {videos.map((v, i) => {
                   const isSelected = v.bvid === selectedBvid
-                  const isCarouselActive = carouselOn && i === carouselIdx
                   return (
                     <tr
                       key={v.bvid}
                       ref={isSelected ? (el) => {
-                        if (el) {
-                          setTimeout(() => el.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 100)
-                        }
+                        if (el) setTimeout(() => el.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 100)
                       } : undefined}
                       onClick={() => {
-                        if (carouselOn) return
+                        if (carousel.on) return
                         setSelectedBvid(v.bvid === selectedBvid ? null : v.bvid)
                       }}
                       className={`
                         border-b border-border-default/30 transition-all duration-300
-                        ${carouselOn ? 'cursor-default' : 'cursor-pointer'}
+                        ${carousel.on ? 'cursor-default' : 'cursor-pointer'}
                         ${isSelected
                           ? 'bg-bili-blue/10 border-l-2 border-l-bili-blue'
                           : 'hover:bg-bg-elevated'}
-                        ${isCarouselActive ? 'animate-highlight-row' : ''}
                       `}
                     >
                       <td className="py-1.5 font-mono-num text-text-muted">{i + 1}</td>
