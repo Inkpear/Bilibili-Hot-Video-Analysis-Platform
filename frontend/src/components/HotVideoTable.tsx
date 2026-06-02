@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useApi } from '../hooks/useApi'
 import { fetchHotVideos } from '../api'
 import { useDashboard } from '../context/DashboardContext'
@@ -22,9 +22,13 @@ export default function HotVideoTable() {
   const { data, loading } = useApi(() => fetchHotVideos(sort, limit, offset), [sort, offset])
   const { selectedBvid, setSelectedBvid, selectedCategory } = useDashboard()
 
-  const videos = data?.videos.filter(
-    (v) => !selectedCategory || v.category === selectedCategory
-  ) ?? []
+  const videos = useMemo(() => {
+    if (!data) return []
+    if (!selectedCategory) return data.videos
+    return data.videos.filter((v) => v.category === selectedCategory)
+  }, [data, selectedCategory])
+
+  const total = data?.total ?? 0
 
   const extra = (
     <div className="flex gap-1">
@@ -49,10 +53,10 @@ export default function HotVideoTable() {
       {loading ? (
         <Loading rows={8} />
       ) : (
-        <div className="flex flex-col h-full">
-          <div className="flex-1 overflow-auto">
+        <div className="flex flex-col h-full min-h-0">
+          <div className="flex-1 overflow-auto min-h-0">
             <table className="w-full text-xs">
-              <thead>
+              <thead className="sticky top-0 bg-bg-card z-10">
                 <tr className="text-text-muted border-b border-border-default">
                   <th className="py-1.5 text-left w-8">#</th>
                   <th className="py-1.5 text-left">标题</th>
@@ -79,12 +83,17 @@ export default function HotVideoTable() {
                     <td className="py-1.5 text-right font-mono-num text-bili-pink">{v.heat_score.toFixed(3)}</td>
                   </tr>
                 ))}
+                {videos.length === 0 && (
+                  <tr>
+                    <td colSpan={5} className="py-8 text-center text-text-muted">当前分区无数据</td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
 
-          <div className="flex items-center justify-between pt-2 border-t border-border-default mt-auto">
-            <span className="text-xs text-text-muted">共 {data?.total ?? 0} 条</span>
+          <div className="flex items-center justify-between pt-2 border-t border-border-default shrink-0">
+            <span className="text-xs text-text-muted">共 {total} 条</span>
             <div className="flex gap-1">
               <button
                 onClick={() => setOffset(Math.max(0, offset - limit))}
@@ -93,9 +102,12 @@ export default function HotVideoTable() {
               >
                 上一页
               </button>
+              <span className="px-2 py-0.5 text-xs text-text-muted font-mono-num">
+                {Math.floor(offset / limit) + 1}
+              </span>
               <button
                 onClick={() => setOffset(offset + limit)}
-                disabled={!data || offset + limit >= data.total}
+                disabled={!data || offset + limit >= total}
                 className="px-2 py-0.5 text-xs rounded bg-bg-elevated text-text-secondary disabled:opacity-30 hover:bg-border-default transition-colors"
               >
                 下一页

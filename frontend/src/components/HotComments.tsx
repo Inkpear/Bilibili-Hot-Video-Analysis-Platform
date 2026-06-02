@@ -17,7 +17,7 @@ export default function HotComments() {
       {loading ? (
         <Loading rows={6} />
       ) : (
-        <div className="flex flex-col gap-2 overflow-auto h-full">
+        <div className="flex flex-col gap-2 overflow-auto min-h-0 h-full">
           {data?.comments.map((c, i) => (
             <div
               key={`${c.bvid}-${i}`}

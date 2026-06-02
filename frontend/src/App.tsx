@@ -10,7 +10,7 @@ import LifecycleChart from './components/LifecycleChart'
 
 export default function App() {
   return (
-    <div className="bg-grid min-h-screen p-4 flex flex-col gap-4 max-w-[1920px] mx-auto">
+    <div className="bg-grid h-screen p-4 flex flex-col gap-3 max-w-[1920px] mx-auto overflow-hidden">
       <ErrorBoundary>
         <Header />
       </ErrorBoundary>
@@ -19,32 +19,44 @@ export default function App() {
         <KPICards />
       </ErrorBoundary>
 
-      <div className="flex-1 grid grid-cols-12 gap-4 min-h-[600px]">
-        <div className="col-span-3 flex flex-col gap-4 min-h-0">
-          <ErrorBoundary>
-            <PartitionBar />
-          </ErrorBoundary>
-          <ErrorBoundary>
-            <WordCloud />
-          </ErrorBoundary>
+      <div className="flex-1 min-h-0 flex gap-3">
+        <div className="w-[24%] min-w-0 flex flex-col gap-3">
+          <div className="flex-1 min-h-0">
+            <ErrorBoundary>
+              <PartitionBar />
+            </ErrorBoundary>
+          </div>
+          <div className="flex-1 min-h-0">
+            <ErrorBoundary>
+              <WordCloud />
+            </ErrorBoundary>
+          </div>
         </div>
 
-        <div className="col-span-5 flex flex-col gap-4 min-h-0">
-          <ErrorBoundary>
-            <HotVideoTable />
-          </ErrorBoundary>
-          <ErrorBoundary>
-            <HotComments />
-          </ErrorBoundary>
+        <div className="flex-1 min-w-0 flex flex-col gap-3">
+          <div className="flex-1 min-h-0">
+            <ErrorBoundary>
+              <HotVideoTable />
+            </ErrorBoundary>
+          </div>
+          <div className="flex-1 min-h-0">
+            <ErrorBoundary>
+              <HotComments />
+            </ErrorBoundary>
+          </div>
         </div>
 
-        <div className="col-span-4 flex flex-col gap-4 min-h-0">
-          <ErrorBoundary>
-            <InteractionRadar />
-          </ErrorBoundary>
-          <ErrorBoundary>
-            <LifecycleChart />
-          </ErrorBoundary>
+        <div className="w-[28%] min-w-0 flex flex-col gap-3">
+          <div className="flex-[1] min-h-0">
+            <ErrorBoundary>
+              <InteractionRadar />
+            </ErrorBoundary>
+          </div>
+          <div className="flex-[2] min-h-0">
+            <ErrorBoundary>
+              <LifecycleChart />
+            </ErrorBoundary>
+          </div>
         </div>
       </div>
     </div>

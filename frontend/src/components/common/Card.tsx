@@ -13,7 +13,7 @@ interface CardProps {
 export default function Card({ title, extra, children, className = '', style, span, rowSpan }: CardProps) {
   return (
     <div
-      className={`card flex flex-col overflow-hidden animate-fade-in-up ${className}`}
+      className={`card flex flex-col animate-fade-in-up ${className}`}
       style={{
         ...style,
         gridColumn: span ? `span ${span}` : undefined,

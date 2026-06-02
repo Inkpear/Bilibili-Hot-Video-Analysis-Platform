@@ -3,6 +3,7 @@ import { fetchWordCloud } from '../api'
 import { useDashboard } from '../context/DashboardContext'
 import Card from './common/Card'
 import ChartWrapper from './common/ChartWrapper'
+import Loading from './common/Loading'
 import type { EChartsOption } from 'echarts'
 import type { WordCloudSource } from '../types'
 
@@ -19,7 +20,9 @@ export default function WordCloud() {
     [wordCloudSource, selectedCategory]
   )
 
-  const option: EChartsOption = data?.words?.length
+  const hasWords = (data?.words?.length ?? 0) > 0
+
+  const option: EChartsOption = hasWords
     ? ({
         tooltip: { show: true },
         series: [
@@ -39,7 +42,7 @@ export default function WordCloud() {
                 return colors[Math.floor(Math.random() * colors.length)]
               },
             },
-            data: data.words.map((w) => ({ name: w.name, value: w.value })),
+            data: data!.words.map((w) => ({ name: w.name, value: w.value })),
           },
         ],
       } as EChartsOption)
@@ -65,7 +68,15 @@ export default function WordCloud() {
 
   return (
     <Card title="词云" extra={extra} className="h-full">
-      <ChartWrapper option={option} loading={loading} />
+      {loading ? (
+        <Loading rows={4} />
+      ) : hasWords ? (
+        <ChartWrapper option={option} />
+      ) : (
+        <div className="flex items-center justify-center h-full text-text-muted text-sm">
+          暂无词云数据
+        </div>
+      )}
     </Card>
   )
 }
