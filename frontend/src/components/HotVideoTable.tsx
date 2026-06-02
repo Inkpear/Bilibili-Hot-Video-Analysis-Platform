@@ -1,4 +1,5 @@
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import { useApi } from '../hooks/useApi'
 import { fetchHotVideos } from '../api'
 import { useDashboard } from '../context/DashboardContext'
@@ -19,7 +20,7 @@ const MAX_VIDEO_MS = 20000
 export default function HotVideoTable() {
   const [sort, setSort] = useState<HotVideosSort>('heat')
   const [hoveredVideo, setHoveredVideo] = useState<HotVideoItem | null>(null)
-  const [hoverPos, setHoverPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 })
+  const [mousePos, setMousePos] = useState<{ x: number; y: number }>({ x: 0, y: 0 })
 
   const { data, loading } = useApi(() => fetchHotVideos(sort, 100, 0), [sort])
   const {
@@ -59,51 +60,29 @@ export default function HotVideoTable() {
 
   useEffect(() => {
     if (!carousel.on) return
-
     const { commentShown, danmakuShown } = carousel.wordCloud
     const wcDone = commentShown && danmakuShown
     const commentsDone = carousel.commentsEnded
-
-    if (wcDone && commentsDone) {
-      advanceCarousel()
-      return
-    }
-
+    if (wcDone && commentsDone) { advanceCarousel(); return }
     const elapsed = Date.now() - videoStartRef.current
     const remaining = MAX_VIDEO_MS - elapsed
-    if (remaining <= 0) {
-      advanceCarousel()
-      return
-    }
-
-    const timeout = setTimeout(() => {
-      advanceCarousel()
-    }, remaining)
-
+    if (remaining <= 0) { advanceCarousel(); return }
+    const timeout = setTimeout(() => advanceCarousel(), remaining)
     return () => clearTimeout(timeout)
   }, [carousel.on, carousel.wordCloud.commentShown, carousel.wordCloud.danmakuShown, carousel.commentsEnded, advanceCarousel])
 
   const handleToggleCarousel = useCallback(() => {
-    if (carousel.on) {
-      stopCarousel()
-      return
-    }
+    if (carousel.on) { stopCarousel(); return }
     videoStartRef.current = Date.now()
-    if (videos.length > 0) {
-      setSelectedBvid(videos[0].bvid)
-    }
+    if (videos.length > 0) setSelectedBvid(videos[0].bvid)
     startCarousel()
   }, [carousel.on, videos, setSelectedBvid, startCarousel, stopCarousel])
 
-  useEffect(() => {
-    return () => stopCarousel()
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => () => stopCarousel(), []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const handleRowHover = useCallback((video: HotVideoItem | null, e?: React.MouseEvent) => {
+  const handleMouseMove = useCallback((video: HotVideoItem | null, e: React.MouseEvent) => {
     setHoveredVideo(video)
-    if (e) {
-      setHoverPos({ x: e.clientX, y: e.clientY })
-    }
+    setMousePos({ x: e.clientX, y: e.clientY })
   }, [])
 
   const sortLabel = SORT_OPTIONS.find((s) => s.value === sort)?.label ?? '热度'
@@ -161,7 +140,7 @@ export default function HotVideoTable() {
   )
 
   return (
-    <Card title="热门视频" extra={extra} className="h-full relative">
+    <Card title="热门视频" extra={extra} className="h-full">
       {loading ? (
         <Loading rows={8} />
       ) : (
@@ -198,8 +177,10 @@ export default function HotVideoTable() {
                         if (carousel.on) return
                         setSelectedBvid(v.bvid === selectedBvid ? null : v.bvid)
                       }}
-                      onMouseEnter={(e) => handleRowHover(v, e)}
-                      onMouseLeave={() => handleRowHover(null)}
+                      onMouseMove={(e) => {
+                        if (!carousel.on) handleMouseMove(v, e)
+                      }}
+                      onMouseLeave={() => setHoveredVideo(null)}
                       className={`
                         border-b border-border-default/30 transition-all duration-300
                         ${carousel.on ? 'cursor-default' : 'cursor-pointer'}
@@ -232,14 +213,15 @@ export default function HotVideoTable() {
         </div>
       )}
 
-      {hoveredVideo && !carousel.on && (
-        <HoverCard video={hoveredVideo} pos={hoverPos} />
+      {hoveredVideo && !carousel.on && createPortal(
+        <HoverCard video={hoveredVideo} mousePos={mousePos} />,
+        document.body
       )}
     </Card>
   )
 }
 
-function HoverCard({ video, pos }: { video: HotVideoItem; pos: { x: number; y: number } }) {
+function HoverCard({ video, mousePos }: { video: HotVideoItem; mousePos: { x: number; y: number } }) {
   const rates = video.view_count > 0 ? {
     like: video.like_count / video.view_count,
     coin: video.coin_count / video.view_count,
@@ -248,29 +230,26 @@ function HoverCard({ video, pos }: { video: HotVideoItem; pos: { x: number; y: n
     share: video.share_count / video.view_count,
   } : null
 
-  const cardW = 260
-  const cardH = 220
-  const pad = 12
+  const W = 260
+  const H = 220
+  const GAP = 14
 
-  let left = pos.x + pad
-  let top = pos.y + pad
+  let left = mousePos.x + GAP
+  let top = mousePos.y + GAP
 
-  if (left + cardW > window.innerWidth - pad) {
-    left = pos.x - cardW - pad
-  }
-  if (top + cardH > window.innerHeight - pad) {
-    top = pos.y - cardH - pad
-  }
-  if (left < pad) left = pad
-  if (top < pad) top = pad
+  if (left + W > window.innerWidth - GAP) left = mousePos.x - W - GAP
+  if (top + H > window.innerHeight - GAP) top = mousePos.y - H - GAP
+  if (left < GAP) left = GAP
+  if (top < GAP) top = GAP
 
   return (
     <div
-      className="fixed pointer-events-none animate-fade-in"
-      style={{ left, top, zIndex: 9999 }}
+      className="pointer-events-none"
+      style={{ position: 'fixed', left, top, zIndex: 2147483647 }}
     >
-      <div className="bg-bg-card border border-bili-blue/30 rounded-lg shadow-2xl p-3 w-[260px]"
-        style={{ boxShadow: '0 8px 32px rgba(0,0,0,0.5), 0 0 0 1px rgba(0,161,214,0.15)' }}
+      <div
+        className="bg-bg-card border border-bili-blue/30 rounded-lg p-3 w-[260px] animate-fade-in"
+        style={{ boxShadow: '0 8px 32px rgba(0,0,0,0.6), 0 0 0 1px rgba(0,161,214,0.2)' }}
       >
         <div className="text-sm font-medium text-text-primary mb-2 line-clamp-1">{video.title}</div>
         <div className="flex items-center gap-2 mb-3">
