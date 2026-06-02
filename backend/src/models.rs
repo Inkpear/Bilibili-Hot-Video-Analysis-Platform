@@ -314,25 +314,6 @@ pub struct PartitionDetailData {
     pub top_ups: Vec<PartitionDetailUp>,
 }
 
-// ---- /api/tag-cloud ----
-
-#[derive(Debug, Serialize)]
-pub struct TagCloudItem {
-    pub name: String,
-    pub value: i32,
-}
-
-#[derive(Debug, sqlx::FromRow)]
-pub struct TagCloudRow {
-    pub name: Option<String>,
-    pub value: Option<i32>,
-}
-
-#[derive(Debug, Serialize)]
-pub struct TagCloudData {
-    pub tags: Vec<TagCloudItem>,
-}
-
 // ---- /api/interaction ----
 
 #[derive(Debug, Serialize)]
@@ -401,6 +382,76 @@ impl From<InteractionRow> for InteractionData {
     }
 }
 
+// ---- /api/word-cloud ----
+
+#[derive(Debug, Serialize)]
+pub struct WordCloudItem {
+    pub name: String,
+    pub value: i32,
+}
+
+#[derive(Debug, sqlx::FromRow)]
+pub struct WordCloudRow {
+    pub name: Option<String>,
+    pub value: Option<i32>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct WordCloudData {
+    pub source: String,
+    pub category: String,
+    pub words: Vec<WordCloudItem>,
+}
+
+// ---- /api/hot-comments ----
+
+#[derive(Debug, Serialize)]
+pub struct HotCommentItem {
+    pub bvid: String,
+    pub title: String,
+    pub category: String,
+    pub up_name: String,
+    pub user_name: String,
+    pub content: String,
+    pub like_count: i64,
+    pub reply_count: i64,
+    pub comment_time: Option<String>,
+}
+
+#[derive(Debug, sqlx::FromRow)]
+pub struct HotCommentRow {
+    pub bvid: Option<String>,
+    pub title: Option<String>,
+    pub category: Option<String>,
+    pub up_name: Option<String>,
+    pub user_name: Option<String>,
+    pub content: Option<String>,
+    pub like_count: Option<i64>,
+    pub reply_count: Option<i64>,
+    pub comment_time: Option<String>,
+}
+
+impl From<HotCommentRow> for HotCommentItem {
+    fn from(row: HotCommentRow) -> Self {
+        Self {
+            bvid: row.bvid.unwrap_or_default(),
+            title: row.title.unwrap_or_default(),
+            category: row.category.unwrap_or_default(),
+            up_name: row.up_name.unwrap_or_default(),
+            user_name: row.user_name.unwrap_or_default(),
+            content: row.content.unwrap_or_default(),
+            like_count: row.like_count.unwrap_or(0),
+            reply_count: row.reply_count.unwrap_or(0),
+            comment_time: row.comment_time,
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+pub struct HotCommentsData {
+    pub comments: Vec<HotCommentItem>,
+}
+
 // ---- query parameters ----
 
 #[derive(Debug, serde::Deserialize)]
@@ -426,11 +477,19 @@ pub struct PartitionDetailQuery {
 }
 
 #[derive(Debug, serde::Deserialize)]
-pub struct TagCloudQuery {
+pub struct InteractionQuery {
+    pub bvid: Option<String>,
+}
+
+#[derive(Debug, serde::Deserialize)]
+pub struct WordCloudQuery {
+    pub source: Option<String>,
     pub category: Option<String>,
 }
 
 #[derive(Debug, serde::Deserialize)]
-pub struct InteractionQuery {
+pub struct HotCommentsQuery {
+    pub category: Option<String>,
     pub bvid: Option<String>,
+    pub limit: Option<i64>,
 }

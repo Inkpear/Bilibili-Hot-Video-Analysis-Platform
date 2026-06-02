@@ -139,13 +139,30 @@ SELECT
     user_id,
     user_name,
     content,
-    COALESCE(like_count, 0) AS like_count,
-    COALESCE(reply_count, 0) AS reply_count,
-    CAST(FROM_UNIXTIME(CAST(comment_time AS BIGINT)) AS TIMESTAMP) AS comment_time
-FROM ods_video_comment_raw
-WHERE content IS NOT NULL
-  AND content != ''
-  AND bvid IS NOT NULL;
+    like_count,
+    reply_count,
+    comment_time
+FROM (
+    SELECT
+        comment_id,
+        bvid,
+        aid,
+        user_id,
+        user_name,
+        content,
+        COALESCE(like_count, 0) AS like_count,
+        COALESCE(reply_count, 0) AS reply_count,
+        CAST(FROM_UNIXTIME(CAST(comment_time AS BIGINT)) AS TIMESTAMP) AS comment_time,
+        ROW_NUMBER() OVER (
+            PARTITION BY comment_id
+            ORDER BY CAST(comment_time AS BIGINT) DESC
+        ) AS rn
+    FROM ods_video_comment_raw
+    WHERE content IS NOT NULL
+      AND content != ''
+      AND bvid IS NOT NULL
+) t
+WHERE t.rn = 1;
 
 -- 4.4 弹幕明细表
 DROP TABLE IF EXISTS dwd_danmaku_info;
@@ -174,11 +191,29 @@ SELECT
     fontsize,
     color,
     mid_hash,
-    CAST(FROM_UNIXTIME(CAST(send_time AS BIGINT)) AS TIMESTAMP) AS send_time
-FROM ods_video_danmaku_raw
-WHERE content IS NOT NULL
-  AND content != ''
-  AND bvid IS NOT NULL;
+    send_time
+FROM (
+    SELECT
+        danmaku_id,
+        bvid,
+        cid,
+        content,
+        video_time,
+        mode,
+        fontsize,
+        color,
+        mid_hash,
+        CAST(FROM_UNIXTIME(CAST(send_time AS BIGINT)) AS TIMESTAMP) AS send_time,
+        ROW_NUMBER() OVER (
+            PARTITION BY danmaku_id
+            ORDER BY CAST(send_time AS BIGINT) DESC
+        ) AS rn
+    FROM ods_video_danmaku_raw
+    WHERE content IS NOT NULL
+      AND content != ''
+      AND bvid IS NOT NULL
+) t
+WHERE t.rn = 1;
 
 -- 4.5 UP 主信息表
 DROP TABLE IF EXISTS dwd_up_info;
@@ -451,16 +486,57 @@ FROM canonical s
 JOIN dwd_video_info v ON s.bvid = v.bvid
 GROUP BY v.category;
 
--- 5.7 标签词云
-DROP TABLE IF EXISTS ads_tag_cloud;
-CREATE TABLE ads_tag_cloud (
-    tag        STRING,
-    tag_count  INT,
-    category   STRING
+-- 5.7 统一词云（标题/评论/弹幕）
+DROP TABLE IF EXISTS ads_word_cloud;
+CREATE TABLE ads_word_cloud (
+    source_type  STRING,
+    category     STRING,
+    word         STRING,
+    word_count   INT
 )
 STORED AS PARQUET;
 
--- 5.8 视频生命周期 ADS
+-- 5.8 热门评论
+DROP TABLE IF EXISTS ads_hot_comments;
+CREATE TABLE ads_hot_comments (
+    bvid         STRING,
+    title        STRING,
+    category     STRING,
+    up_name      STRING,
+    user_name    STRING,
+    content      STRING,
+    like_count   BIGINT,
+    reply_count  BIGINT,
+    comment_time TIMESTAMP
+)
+STORED AS PARQUET;
+
+INSERT OVERWRITE TABLE ads_hot_comments
+SELECT
+    c.bvid,
+    v.title,
+    v.category,
+    v.up_name,
+    c.user_name,
+    c.content,
+    c.like_count,
+    c.reply_count,
+    c.comment_time
+FROM dwd_comment_info c
+JOIN dwd_video_info v ON c.bvid = v.bvid
+WHERE c.content IS NOT NULL AND c.content != ''
+ORDER BY c.like_count DESC
+LIMIT 5000;
+
+INSERT OVERWRITE TABLE ads_word_cloud
+-- 标题词云数据（由 MapReduce 生成，此处仅建空表框架）
+SELECT source_type, category, word, word_count
+FROM (
+    SELECT 'title' AS source_type, '全站' AS category, '__placeholder__' AS word, 0 AS word_count
+) t
+WHERE 1 = 0;
+
+-- 5.9 视频生命周期 ADS
 DROP TABLE IF EXISTS ads_video_lifecycle;
 CREATE TABLE ads_video_lifecycle AS
 SELECT
@@ -480,12 +556,12 @@ SELECT
     COALESCE(rank_change, 0) AS rank_change
 FROM dws_video_lifecycle_stats;
 
--- 5.9 分区每日 ADS
+-- 5.10 分区每日 ADS
 DROP TABLE IF EXISTS ads_partition_daily;
 CREATE TABLE ads_partition_daily AS
 SELECT * FROM dws_partition_daily_stats;
 
--- 5.10 UP 主汇总 ADS
+-- 5.11 UP 主汇总 ADS
 DROP TABLE IF EXISTS ads_up_summary;
 CREATE TABLE ads_up_summary AS
 SELECT * FROM dws_up_summary_stats;
@@ -499,4 +575,5 @@ SELECT 'ads_partition_compare' AS tbl, COUNT(*) FROM ads_partition_compare;
 SELECT 'ads_video_lifecycle' AS tbl, COUNT(*) FROM ads_video_lifecycle;
 SELECT 'ads_partition_daily' AS tbl, COUNT(*) FROM ads_partition_daily;
 SELECT 'ads_up_summary'      AS tbl, COUNT(*) FROM ads_up_summary;
-SELECT 'ads_tag_cloud'       AS tbl, COUNT(*) FROM ads_tag_cloud;
+SELECT 'ads_word_cloud'      AS tbl, COUNT(*) FROM ads_word_cloud;
+SELECT 'ads_hot_comments'    AS tbl, COUNT(*) FROM ads_hot_comments;

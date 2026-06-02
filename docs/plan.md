@@ -239,7 +239,8 @@ x_norm = COALESCE((log_x - log_min) / NULLIF(log_max - log_min, 0), 0)
 | ADS | ads_video_lifecycle | MySQL | — | 视频生命周期 |
 | ADS | ads_partition_daily | MySQL | — | 分区每日汇总 |
 | ADS | ads_up_summary | MySQL | — | UP 主汇总 |
-| ADS | ads_tag_cloud | MySQL | — | 标签词云 |
+| ADS | ads_word_cloud | MySQL | — | 统一词云（标题/评论/弹幕） |
+| ADS | ads_hot_comments | MySQL | — | 热门评论 |
 
 HDFS 目录结构：
 
@@ -979,19 +980,40 @@ JOIN dwd_video_info v ON s.bvid = v.bvid
 GROUP BY v.category;
 ```
 
-**5.7 标签词云 (ads_tag_cloud)**
+**5.7 统一词云 (ads_word_cloud)**
 
 ```sql
-CREATE TABLE ads_tag_cloud (
-    tag        STRING,
-    tag_count  INT,
-    category   STRING
+CREATE TABLE ads_word_cloud (
+    source_type  STRING,    -- title/comment/danmaku
+    category     STRING,    -- 全站/游戏/动画/...
+    word         STRING,
+    word_count   INT
 )
 STORED AS PARQUET;
 ```
 
-> 热门视频 tags 天然为空（B站数据现象，详见 §3.1 已知限制），`ads_tag_cloud` 由后续 `scripts/run_tag_cloud_mr.sh` 覆盖写入。
-> 输入来自最新 `ads_hot_video_rank` 的 `category\ttitle`，Hadoop Streaming 使用 Python3 + jieba 做标题分词，输出全站与分区词频。
+> 标题词云由 `scripts/run_tag_cloud_mr.sh`（参数化，支持 title/comment/danmaku）通过 Hadoop Streaming + Python3/jieba 生成。
+> 评论词云和弹幕词云分别从 `dwd_comment_info` 和 `dwd_danmaku_info` 取数据。
+> 结果写入 `ads_word_cloud`，`source_type` 区分三种词云。
+
+**5.8 热门评论 (ads_hot_comments)**
+
+```sql
+CREATE TABLE ads_hot_comments (
+    bvid         STRING,
+    title        STRING,
+    category     STRING,
+    up_name      STRING,
+    user_name    STRING,
+    content      STRING,
+    like_count   BIGINT,
+    reply_count  BIGINT,
+    comment_time TIMESTAMP
+)
+STORED AS PARQUET;
+```
+
+> 从 `dwd_comment_info` JOIN `dwd_video_info` 取高赞评论，按 `like_count DESC` 排序，LIMIT 5000。
 
 **5.8 视频生命周期 ADS (ads_video_lifecycle)**
 
@@ -1051,7 +1073,7 @@ HDFS 输入输出：
 /data/bilibili/mr_output/title_words  # category\ttag\ttag_count
 ```
 
-结果写回 Hive `ads_tag_cloud`，其中 `category='全站'` 表示全局词云，其余为分区词云。
+结果写回 Hive `ads_word_cloud`，其中 `category='全站'` 表示全局词云，其余为分区词云。
 
 **验证**：
 
@@ -1059,7 +1081,7 @@ HDFS 输入输出：
 SELECT * FROM ads_screen_overview;
 SELECT * FROM ads_hot_video_rank ORDER BY heat_score DESC LIMIT 5;
 SELECT * FROM ads_partition_compare ORDER BY hot_video_count DESC;
-SELECT * FROM ads_tag_cloud ORDER BY tag_count DESC LIMIT 20;
+SELECT * FROM ads_word_cloud WHERE source_type = 'title' ORDER BY word_count DESC LIMIT 20;
 SELECT bvid, COUNT(*) FROM ads_video_lifecycle GROUP BY bvid;
 ```
 
@@ -1187,7 +1209,7 @@ CREATE TABLE ads_up_summary (
 );
 
 -- 标签词云
-CREATE TABLE ads_tag_cloud (
+CREATE TABLE ads_word_cloud (
     id          INT AUTO_INCREMENT PRIMARY KEY,
     tag         VARCHAR(64),
     tag_count   INT,
@@ -1204,7 +1226,7 @@ CREATE TABLE ads_tag_cloud (
 mysql -u root bilibili -e "SELECT * FROM ads_screen_overview;"
 mysql -u root bilibili -e "SELECT COUNT(*) FROM ads_hot_video_rank;"
 mysql -u root bilibili -e "SELECT COUNT(*) FROM ads_video_lifecycle;"
-mysql -u root bilibili -e "SELECT * FROM ads_tag_cloud ORDER BY tag_count DESC LIMIT 10;"
+mysql -u root bilibili -e "SELECT * FROM ads_word_cloud WHERE source_type = 'title' ORDER BY word_count DESC LIMIT 10;"
 ```
 
 ## 5. Backend API (Rust Axum)
@@ -1219,10 +1241,11 @@ mysql -u root bilibili -e "SELECT * FROM ads_tag_cloud ORDER BY tag_count DESC L
 | GET | `/api/lifecycle` | `?bvid=BVxxx` | 单视频生命周期 | ads_video_lifecycle |
 | GET | `/api/lifecycle/top` | `?limit=5` | TOP N 视频生命周期 | ads_video_lifecycle |
 | GET | `/api/partition-detail` | `?category=游戏` | 分区详情（视频+UP主） | 多表 JOIN |
-| GET | `/api/tag-cloud` | `?category=游戏` | 标签词云数据 | ads_tag_cloud |
+| GET | `/api/word-cloud` | `?source=title&category=游戏` | 词云（标题/评论/弹幕） | ads_word_cloud |
+| GET | `/api/hot-comments` | `?category=游戏&limit=20` | 热门评论排行 | ads_hot_comments |
 | GET | `/api/interaction` | `?bvid=BVxxx` | 互动质量数据 | ads_hot_video_rank |
 
-Base URL: `http://localhost:3000`，所有响应统一包裹为 `{ "code": 0, "message": "ok", "data": {...} }`。
+Base URL: `http://localhost:9090`，所有响应统一包裹为 `{ "code": 0, "message": "ok", "data": {...} }`。
 
 **错误码约定**：
 
@@ -1261,7 +1284,7 @@ tower-http = { version = "0.5", features = ["cors"] }
 
 **通用约定**：
 
-- Base URL: `http://localhost:3000`
+- Base URL: `http://localhost:9090`
 - 所有响应均为 JSON，包裹在统一结构中：
 
 ```json
@@ -1543,30 +1566,35 @@ tower-http = { version = "0.5", features = ["cors"] }
 
 ---
 
-#### GET `/api/tag-cloud`
+#### GET `/api/word-cloud`
 
 **请求**：
 
 | 参数 | 类型 | 必填 | 说明 |
 |---|---|---|---|
+| source | string | 否 | 数据来源：title/comment/danmaku，默认 title |
 | category | string | 否 | 分区筛选，不传则返回全站 |
 
 **响应 `data`**：
 
 ```json
 {
-  "tags": [
-    { "name": "搞笑", "value": 87 },
-    { "name": "推荐", "value": 65 },
-    { "name": "游戏实况", "value": 52 }
+  "source": "comment",
+  "category": "游戏",
+  "words": [
+    { "name": "剧情", "value": 42 },
+    { "name": "操作", "value": 37 }
   ]
 }
 ```
 
 | 字段 | 类型 | 说明 |
 |---|---|---|
-| name | string | 标签名 |
-| value | int | 出现次数（>0） |
+| source | string | 数据来源类型 |
+| category | string | 分区名 |
+| words | array | 词列表 |
+| words[].name | string | 词 |
+| words[].value | int | 出现次数（>0） |
 
 ---
 
@@ -1603,8 +1631,8 @@ tower-http = { version = "0.5", features = ["cors"] }
 
 ```bash
 cargo run
-curl http://localhost:3000/api/overview
-curl "http://localhost:3000/api/hot-videos?sort=heat&limit=10"
+curl http://localhost:9090/api/overview
+curl "http://localhost:9090/api/hot-videos?sort=heat&limit=10"
 ```
 
 ### 5.5 API Test Cases
@@ -1743,7 +1771,7 @@ curl "http://localhost:3000/api/hot-videos?sort=heat&limit=10"
 
 | 项 | 内容 |
 |---|---|
-| Given | `ads_tag_cloud` 表有数据 |
+| Given | `ads_word_cloud` 表有数据 |
 | When | `GET /api/tag-cloud`（无参数） |
 | Then | `code=0`，`data.tags` 为数组，每条含 `name`(string) 和 `value`(int>0)，按 `value` 降序 |
 
@@ -1751,7 +1779,7 @@ curl "http://localhost:3000/api/hot-videos?sort=heat&limit=10"
 
 | 项 | 内容 |
 |---|---|
-| Given | `ads_tag_cloud` 表有"游戏"分区的标签 |
+| Given | `ads_word_cloud` 表有"游戏"分区的标签 |
 | When | `GET /api/tag-cloud?category=游戏` |
 | Then | `code=0`，`data.tags` 只包含 `category="游戏"` 的标签 |
 
@@ -1759,7 +1787,7 @@ curl "http://localhost:3000/api/hot-videos?sort=heat&limit=10"
 
 | 项 | 内容 |
 |---|---|
-| Given | `ads_tag_cloud` 表无数据 |
+| Given | `ads_word_cloud` 表无数据 |
 | When | `GET /api/tag-cloud` |
 | Then | `code=0`，`data.tags=[]` |
 
@@ -1802,7 +1830,7 @@ curl "http://localhost:3000/api/hot-videos?sort=heat&limit=10"
 # test_api.sh — 运行后可快速核验 8 个端点
 # 使用方法: bash scripts/test_api.sh [BASE_URL]
 
-BASE="${1:-http://localhost:3000}"
+BASE="${1:-http://localhost:9090}"
 PASS=0
 FAIL=0
 
@@ -1968,7 +1996,7 @@ echo "Results: $PASS passed, $FAIL failed"
 |---|---|---|
 | 顶部 KPI 卡片 | `/api/overview` | — |
 | 分区排行柱状图 | `/api/partition-compare` | 点击分区 → 联动词云和详情 |
-| 标签词云 | `/api/tag-cloud` | 点击标签 → 筛选视频列表 |
+| 标题词云 | `/api/word-cloud?source=title` | 点击词 → 筛选视频列表 |
 | 分区竞争力气泡图 | `/api/partition-compare` | 悬停显示详情 |
 | 热门视频排行 | `/api/hot-videos` | 点击视频 → 生命周期详情 |
 | 互动质量雷达图 | `/api/interaction` | 跟随视频选择联动 |
@@ -2089,14 +2117,35 @@ export interface PartitionDetailData {
   top_ups: PartitionDetailUp[];
 }
 
-// ---- GET /api/tag-cloud ----
-export interface TagCloudItem {
+// ---- GET /api/word-cloud ----
+export interface WordCloudItem {
   name: string;
   value: number;
 }
 
-export interface TagCloudData {
-  tags: TagCloudItem[];
+export type WordCloudSource = 'title' | 'comment' | 'danmaku';
+
+export interface WordCloudData {
+  source: string;
+  category: string;
+  words: WordCloudItem[];
+}
+
+// ---- GET /api/hot-comments ----
+export interface HotCommentItem {
+  bvid: string;
+  title: string;
+  category: string;
+  up_name: string;
+  user_name: string;
+  content: string;
+  like_count: number;
+  reply_count: number;
+  comment_time: string | null;
+}
+
+export interface HotCommentsData {
+  comments: HotCommentItem[];
 }
 
 // ---- GET /api/interaction ----
@@ -2181,7 +2230,7 @@ cd frontend && npm run dev
 | Stage 4 | DWD 清洗后无异常数据 | `hive -e "SELECT * FROM dwd_video_snapshot WHERE view_count < 0;"` — 应返回 0 行 |
 | Stage 5 | ADS 各表有数据 | `hive -e "SELECT * FROM ads_screen_overview;"` |
 | Stage 5 | 分区竞争力数据完整 | `hive -e "SELECT COUNT(*) FROM ads_partition_compare;"` |
-| Stage 5 | 标签词云有数据 | `hive -e "SELECT COUNT(*) FROM ads_tag_cloud;"` |
+| Stage 5 | 词云有数据 | `hive -e "SELECT source_type, COUNT(*) FROM ads_word_cloud GROUP BY source_type;"` |
 | Stage 5 | 生命周期数据有时间序列 | `hive -e "SELECT bvid, COUNT(*) FROM ads_video_lifecycle GROUP BY bvid;"` — 每视频应有多行 |
 | Stage 5 | 热度分数 ∈ [0, 1] | `hive -e "SELECT MIN(heat_score), MAX(heat_score) FROM ads_hot_video_rank;"` |
 | Stage 6 | MySQL 中有全部 ADS 数据 | `mysql -u root bilibili -e "SHOW TABLES;"` |

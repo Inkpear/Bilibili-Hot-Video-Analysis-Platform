@@ -115,17 +115,39 @@ CREATE TABLE ads_up_summary (
 );
 
 -- ----------------------------------------------------------------------------
--- ads_tag_cloud: 标签词云
+-- ads_word_cloud: 统一词云（标题/评论/弹幕）
 -- ----------------------------------------------------------------------------
-DROP TABLE IF EXISTS ads_tag_cloud;
-CREATE TABLE ads_tag_cloud (
+DROP TABLE IF EXISTS ads_word_cloud;
+CREATE TABLE ads_word_cloud (
     id          INT AUTO_INCREMENT PRIMARY KEY,
-    tag         VARCHAR(64),
-    tag_count   INT,
+    source_type VARCHAR(32),
     category    VARCHAR(64),
+    word        VARCHAR(64),
+    word_count  INT,
     update_time DATETIME DEFAULT CURRENT_TIMESTAMP,
-    INDEX idx_tag (tag),
-    INDEX idx_category (category)
+    INDEX idx_source_category (source_type, category),
+    INDEX idx_word (word)
+);
+
+-- ----------------------------------------------------------------------------
+-- ads_hot_comments: 热门评论
+-- ----------------------------------------------------------------------------
+DROP TABLE IF EXISTS ads_hot_comments;
+CREATE TABLE ads_hot_comments (
+    id           INT AUTO_INCREMENT PRIMARY KEY,
+    bvid         VARCHAR(32),
+    title        VARCHAR(512),
+    category     VARCHAR(64),
+    up_name      VARCHAR(128),
+    user_name    VARCHAR(128),
+    content      TEXT,
+    like_count   BIGINT,
+    reply_count  BIGINT,
+    comment_time DATETIME,
+    update_time  DATETIME DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_category (category),
+    INDEX idx_bvid (bvid),
+    INDEX idx_like (like_count)
 );
 
 -- 验证

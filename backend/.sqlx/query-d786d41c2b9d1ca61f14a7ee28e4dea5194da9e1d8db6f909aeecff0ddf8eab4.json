@@ -1,0 +1,34 @@
+{
+  "db_name": "MySQL",
+  "query": "SELECT hot_video_count, avg_views\n           FROM ads_partition_compare\n           WHERE category = ?\n           LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "hot_video_count",
+        "type_info": {
+          "type": "Long",
+          "flags": "",
+          "max_size": 11
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "avg_views",
+        "type_info": {
+          "type": "LongLong",
+          "flags": "",
+          "max_size": 20
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true,
+      true
+    ]
+  },
+  "hash": "d786d41c2b9d1ca61f14a7ee28e4dea5194da9e1d8db6f909aeecff0ddf8eab4"
+}

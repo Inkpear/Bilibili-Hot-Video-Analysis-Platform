@@ -56,23 +56,23 @@ if [ -f "$SNAPSHOT_DIR/rank_video.ndjson" ]; then
         "hdfs dfs -put -f - ${HDFS_BASE}/rank_video/${SNAPSHOT_ID}_rank_video.ndjson"
 fi
 
-# 上传评论（合并上传，避免逐文件 SSH 开销）
+# 上传评论（按快照文件名覆盖，保留其他快照文件）
 if [ -d "$SNAPSHOT_DIR/comments" ] && [ "$(ls -A $SNAPSHOT_DIR/comments 2>/dev/null)" ]; then
     file_count=$(ls "$SNAPSHOT_DIR"/comments/*.ndjson 2>/dev/null | wc -l)
     echo "[2/4] 上传评论 (${file_count} 个文件，合并上传) ..."
     sshpass -p "$MASTER_PASS" ssh -o StrictHostKeyChecking=no ${MASTER_USER}@${MASTER_HOST} \
-        "hdfs dfs -rm -r ${HDFS_BASE}/video_comment/* >/dev/null 2>&1 || true"
+        "hdfs dfs -rm -f ${HDFS_BASE}/video_comment/${SNAPSHOT_ID}_comments.ndjson >/dev/null 2>&1 || true"
     cat "$SNAPSHOT_DIR"/comments/*.ndjson | \
         sshpass -p "$MASTER_PASS" ssh -o StrictHostKeyChecking=no ${MASTER_USER}@${MASTER_HOST} \
         "hdfs dfs -put -f - ${HDFS_BASE}/video_comment/${SNAPSHOT_ID}_comments.ndjson"
 fi
 
-# 上传弹幕（合并上传，避免逐文件 SSH 开销）
+# 上传弹幕（按快照文件名覆盖，保留其他快照文件）
 if [ -d "$SNAPSHOT_DIR/danmaku" ] && [ "$(ls -A $SNAPSHOT_DIR/danmaku 2>/dev/null)" ]; then
     file_count=$(ls "$SNAPSHOT_DIR"/danmaku/*.ndjson 2>/dev/null | wc -l)
     echo "[3/4] 上传弹幕 (${file_count} 个文件，合并上传) ..."
     sshpass -p "$MASTER_PASS" ssh -o StrictHostKeyChecking=no ${MASTER_USER}@${MASTER_HOST} \
-        "hdfs dfs -rm -r ${HDFS_BASE}/video_danmaku/* >/dev/null 2>&1 || true"
+        "hdfs dfs -rm -f ${HDFS_BASE}/video_danmaku/${SNAPSHOT_ID}_danmaku.ndjson >/dev/null 2>&1 || true"
     cat "$SNAPSHOT_DIR"/danmaku/*.ndjson | \
         sshpass -p "$MASTER_PASS" ssh -o StrictHostKeyChecking=no ${MASTER_USER}@${MASTER_HOST} \
         "hdfs dfs -put -f - ${HDFS_BASE}/video_danmaku/${SNAPSHOT_ID}_danmaku.ndjson"

@@ -28,6 +28,8 @@ cat "$SCRIPT_DIR/run_tag_cloud_mr.sh" | $SSH_CMD "cat > /home/hadoop/scripts/run
 cat "$SCRIPT_DIR/../mapreduce/mapper.py" | $SSH_CMD "cat > /home/hadoop/mapreduce/mapper.py && chmod +x /home/hadoop/mapreduce/mapper.py"
 cat "$SCRIPT_DIR/../mapreduce/reducer.py" | $SSH_CMD "cat > /home/hadoop/mapreduce/reducer.py && chmod +x /home/hadoop/mapreduce/reducer.py"
 cat "$SCRIPT_DIR/../mapreduce/stopwords.txt" | $SSH_CMD "cat > /home/hadoop/mapreduce/stopwords.txt"
+cat "$SCRIPT_DIR/../mapreduce/stopwords_comment.txt" | $SSH_CMD "cat > /home/hadoop/mapreduce/stopwords_comment.txt"
+cat "$SCRIPT_DIR/../mapreduce/stopwords_danmaku.txt" | $SSH_CMD "cat > /home/hadoop/mapreduce/stopwords_danmaku.txt"
 echo "  SQL、MapReduce 和导出脚本已部署"
 
 # 1. 创建 HDFS 目录
