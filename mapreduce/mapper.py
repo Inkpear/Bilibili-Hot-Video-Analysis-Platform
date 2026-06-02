@@ -23,7 +23,7 @@ if PY2:
 else:
     text_type = str
 
-STOPWORDS_FILE = "stopwords.txt"
+STOPWORDS_FILE = sys.argv[1] if len(sys.argv) > 1 else "stopwords.txt"
 TOKEN_RE = re.compile(u"[A-Za-z][A-Za-z0-9_+#.-]*|[0-9A-Za-z+#.-]{2,}|[\u4e00-\u9fff]+")
 CJK_RE = re.compile(u"^[\u4e00-\u9fff]+$")
 

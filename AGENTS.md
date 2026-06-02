@@ -48,9 +48,9 @@ Bilibili-Hot-Video-Analysis-Platform/
 | 输出格式 | NDJSON（每行一个 JSON 对象），含 aid/cid/collect_time/category/snapshot_id |
 | 存储 | ODS/DWD/DWS → Hive；ADS → MySQL（Spark JDBC 导出） |
 | 前端 | React 18 + TypeScript + ECharts |
-| 后端 | Rust Axum，8 个 GET 端点，端口 3000，CORS 全开 |
+| 后端 | Rust Axum，10 个 GET 端点，端口 9090，CORS 全开 |
 | 错误码 | 0=成功，400=参数错误，500=内部错误 |
-| 标签词云 | Hadoop Streaming + Python3/jieba 标题分词，写入 ads_tag_cloud |
+| 词云 | Hadoop Streaming + Python3/jieba，统一 ads_word_cloud 表（title/comment/danmaku） |
 
 ## Cluster Architecture
 
@@ -125,7 +125,7 @@ virsh net-dhcp-leases hadoop-net
 **后端 (Rust Axum)**：
 ```bash
 cd backend
-cargo run                    # 启动服务，监听 0.0.0.0:3000
+cargo run                    # 启动服务，监听 0.0.0.0:9090
 cargo check                  # 编译检查（sqlx 宏校验 SQL）
 cargo fmt                    # 格式化代码
 ```
@@ -137,19 +137,21 @@ cargo fmt                    # 格式化代码
 
 **后端验证**：
 ```bash
-curl http://localhost:3000/api/overview
-curl "http://localhost:3000/api/hot-videos?sort=heat&limit=10"
-curl http://localhost:3000/api/partition-compare
-curl "http://localhost:3000/api/lifecycle?bvid=BVxxx"
-curl "http://localhost:3000/api/lifecycle/top?limit=5"
-curl "http://localhost:3000/api/partition-detail?category=游戏"
-curl "http://localhost:3000/api/tag-cloud"
-curl "http://localhost:3000/api/interaction?bvid=BVxxx"
+curl http://localhost:9090/api/overview
+curl "http://localhost:9090/api/hot-videos?sort=heat&limit=10"
+curl http://localhost:9090/api/partition-compare
+curl "http://localhost:9090/api/lifecycle?bvid=BVxxx"
+curl "http://localhost:9090/api/lifecycle/top?limit=5"
+curl "http://localhost:9090/api/partition-detail?category=游戏"
+curl "http://localhost:9090/api/word-cloud"
+curl "http://localhost:9090/api/word-cloud?source=comment&category=游戏"
+curl "http://localhost:9090/api/hot-comments"
+curl "http://localhost:9090/api/interaction?bvid=BVxxx"
 ```
 
 ## API Contract
 
-8 个只读端点，统一响应 `{"code":0,"message":"ok","data":{...}}`：
+10 个只读端点，统一响应 `{"code":0,"message":"ok","data":{...}}`：
 
 | 端点 | 用途 |
 |---|---|
@@ -159,7 +161,8 @@ curl "http://localhost:3000/api/interaction?bvid=BVxxx"
 | `GET /api/lifecycle?bvid=BVxxx` | 单视频生命周期 |
 | `GET /api/lifecycle/top?limit=5` | TOP N 生命周期 |
 | `GET /api/partition-detail?category=游戏` | 分区下钻 |
-| `GET /api/tag-cloud?category=游戏` | 标签词云 |
+| `GET /api/word-cloud?source=title&category=游戏` | 词云（标题/评论/弹幕） |
+| `GET /api/hot-comments?category=游戏&limit=20` | 热门评论排行 |
 | `GET /api/interaction?bvid=BVxxx` | 互动质量 |
 
 完整 JSON 示例和 TypeScript 类型见 `docs/plan.md` Section 5.3 / 6.3。
@@ -171,10 +174,10 @@ curl "http://localhost:3000/api/interaction?bvid=BVxxx"
 - [x] Hadoop/Hive/Spark 环境搭建（Hadoop 3.3.6 + Hive 3.1.3 + Spark 3.5.3 集群已启动）
 - [x] 采集脚本开发 — 事务模型：日结模式，每视频按 /view→UP→评论→弹幕 全量采集，fail_count≥3 永久放弃
 - [x] Hive DDL + Spark SQL ETL — ODS/DWD/DWS/ADS 全链路 SQL，已部署到集群
-- [x] MySQL 建表 + 数据导出 — 7 张 ADS 表，Spark JDBC 导出脚本
-- [x] MapReduce 标题词云 — Hadoop Streaming + Python3/jieba，已接入日常管线
-- [x] 数据管线全链路验证 — P10 问题已解决，7 张 ADS 表全部导出 MySQL 成功
-- [x] Rust 后端 8 个 API 实现 — Axum + sqlx 宏编译期校验，8 个 GET 端点已验证
+- [x] MySQL 建表 + 数据导出 — 8 张 ADS 表，Spark JDBC 导出脚本
+- [x] MapReduce 词云 — Hadoop Streaming + Python3/jieba，支持标题/评论/弹幕三种 source
+- [x] 数据管线全链路验证 — P10 问题已解决，8 张 ADS 表全部导出 MySQL 成功
+- [x] Rust 后端 10 个 API 实现 — Axum + sqlx 宏编译期校验，10 个 GET 端点已验证
 - [ ] React 前端大屏开发
 - [ ] 课程报告 + PPT
 
@@ -197,5 +200,5 @@ curl "http://localhost:3000/api/interaction?bvid=BVxxx"
 - Cookie 含分号时不能用 `export $(grep ... | xargs)` 提取（bash 会将 `;` 解析为命令分隔符），必须用 `grep -o | sed` 提取原始值
 - 采集部署在 WSL，通过 user-level systemd 常驻 `crawler.service` 自动循环触发；日志用 `journalctl --user -u crawler.service -f` 查看
 - `crawler.service` 启动即采集，采集完成后自动运行 `run_pipeline.sh`，再休眠 6 小时进入下一轮；需要停止时手动 `systemctl --user stop crawler.service`
-- 热门视频 tags 全空（B站数据现象），标签词云由 `scripts/run_tag_cloud_mr.sh` 基于 `ads_hot_video_rank.title` 做 MapReduce 标题分词生成
+- 热门视频 tags 全空（B站数据现象），标签词云由 `scripts/run_tag_cloud_mr.sh` 基于 `ads_hot_video_rank.title` 做 MapReduce 标题分词生成，结果写入 `ads_word_cloud`（source_type='title'）
 - 生命周期折线图 Day 1 仅有 1 个快照点（`view_growth=0`），至少需要 2 轮采集

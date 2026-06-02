@@ -33,10 +33,47 @@ echo ""
 echo "[2/4] 运行 Spark ETL..."
 $SSH_CMD "spark-sql --master spark://master:7077 -f /home/hadoop/sql/spark_etl.sql" 2>&1 | tail -20
 
-# Step 3: 标题词云 MapReduce
+# Step 3: 词云 MapReduce（标题/评论/弹幕）
 echo ""
-echo "[3/4] 运行标题词云 MapReduce..."
-$SSH_CMD "bash /home/hadoop/scripts/run_tag_cloud_mr.sh"
+echo "[3/4] 运行词云 MapReduce..."
+$SSH_CMD "SOURCE_TYPE=title bash /home/hadoop/scripts/run_tag_cloud_mr.sh" 2>&1 | tail -5
+$SSH_CMD "SOURCE_TYPE=comment bash /home/hadoop/scripts/run_tag_cloud_mr.sh" 2>&1 | tail -5
+$SSH_CMD "SOURCE_TYPE=danmaku bash /home/hadoop/scripts/run_tag_cloud_mr.sh" 2>&1 | tail -5
+
+echo ""
+echo "[3.5/4] 合并词云到 ads_word_cloud..."
+$SSH_CMD "spark-sql --master spark://master:7077 -e \"
+USE bilibili;
+INSERT OVERWRITE TABLE ads_word_cloud
+SELECT source_type, category, word, word_count
+FROM (
+  SELECT source_type, category, word, word_count,
+         ROW_NUMBER() OVER (
+           PARTITION BY source_type, category ORDER BY word_count DESC, word ASC
+         ) AS rn
+  FROM (
+    SELECT 'title' AS source_type,
+           CASE WHEN category = '__ALL__' THEN '全站' ELSE category END AS category,
+           word, word_count
+    FROM mr_title_raw
+    WHERE word IS NOT NULL AND word != '' AND word_count >= 2
+    UNION ALL
+    SELECT 'comment' AS source_type,
+           CASE WHEN category = '__ALL__' THEN '全站' ELSE category END AS category,
+           word, word_count
+    FROM mr_comment_raw
+    WHERE word IS NOT NULL AND word != '' AND word_count >= 2
+    UNION ALL
+    SELECT 'danmaku' AS source_type,
+           CASE WHEN category = '__ALL__' THEN '全站' ELSE category END AS category,
+           word, word_count
+    FROM mr_danmaku_raw
+    WHERE word IS NOT NULL AND word != '' AND word_count >= 2
+  ) all_words
+) ranked
+WHERE (category = '全站' AND rn <= 150)
+   OR (category != '全站' AND rn <= 100);
+\"" 2>&1 | tail -5
 
 # Step 4: 导出到 MySQL
 echo ""

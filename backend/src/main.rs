@@ -47,7 +47,11 @@ async fn main() {
             "/api/partition-detail",
             axum::routing::get(handlers::partition_detail),
         )
-        .route("/api/tag-cloud", axum::routing::get(handlers::tag_cloud))
+        .route("/api/word-cloud", axum::routing::get(handlers::word_cloud))
+        .route(
+            "/api/hot-comments",
+            axum::routing::get(handlers::hot_comments),
+        )
         .route(
             "/api/interaction",
             axum::routing::get(handlers::interaction),

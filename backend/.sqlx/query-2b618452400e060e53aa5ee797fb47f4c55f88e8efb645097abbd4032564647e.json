@@ -1,6 +1,6 @@
 {
   "db_name": "MySQL",
-  "query": "SELECT\n            tag AS `name: String`,\n            tag_count AS `value: i32`\n        FROM ads_tag_cloud\n        WHERE category = ?\n        ORDER BY tag_count DESC\n        LIMIT 100",
+  "query": "SELECT\n            word AS `name: String`,\n            word_count AS `value: i32`\n        FROM ads_word_cloud\n        WHERE source_type = ? AND category = ?\n        ORDER BY word_count DESC\n        LIMIT 100",
   "describe": {
     "columns": [
       {
@@ -23,12 +23,12 @@
       }
     ],
     "parameters": {
-      "Right": 1
+      "Right": 2
     },
     "nullable": [
       true,
       true
     ]
   },
-  "hash": "dc63b81c71ac1965ef623b4ff7d099dfb7cf8ec654d41f30704f710cbd40e9ff"
+  "hash": "2b618452400e060e53aa5ee797fb47f4c55f88e8efb645097abbd4032564647e"
 }

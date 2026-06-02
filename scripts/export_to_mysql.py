@@ -29,7 +29,8 @@ TABLES = [
     "ads_video_lifecycle",
     "ads_partition_daily",
     "ads_up_summary",
-    "ads_tag_cloud",
+    "ads_word_cloud",
+    "ads_hot_comments",
 ]
 
 spark = SparkSession.builder \

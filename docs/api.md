@@ -21,7 +21,8 @@
 7. [/api/lifecycle](#7-apilifecycle)
 8. [/api/lifecycle/top](#8-apilifecycletop)
 9. [/api/partition-detail](#9-apipartition-detail)
-10. [/api/tag-cloud](#10-apitag-cloud)
+9. [/api/word-cloud](#9-apiword-cloud)
+10. [/api/hot-comments](#10-apihot-comments)
 11. [/api/interaction](#11-apiinteraction)
 12. [错误码与状态码](#12-错误码与状态码)
 13. [TypeScript 类型定义](#13-typescript-类型定义)
@@ -166,7 +167,8 @@ curl -H "Authorization: Bearer wrong_token" http://localhost:3000/api/overview
 | `GET` | `/api/lifecycle` | 单视频生命周期 |
 | `GET` | `/api/lifecycle/top` | TOP N 热门视频生命周期 |
 | `GET` | `/api/partition-detail` | 分区下钻详情 |
-| `GET` | `/api/tag-cloud` | 标签词云 |
+| `GET` | `/api/word-cloud` | 词云（标题/评论/弹幕） |
+| `GET` | `/api/hot-comments` | 热门评论排行 |
 | `GET` | `/api/interaction` | 视频互动质量 |
 
 ---
@@ -642,18 +644,19 @@ curl "http://localhost:3000/api/partition-detail?category=不存在分区"
 
 ---
 
-## 9. `/api/tag-cloud`
+## 9. `/api/word-cloud`
 
-标签词云，基于标题 MapReduce 分词结果。
+统一词云接口，支持标题词云、评论词云、弹幕词云三种 source。
 
 ### 请求
 
 ```
-GET /api/tag-cloud?category=游戏
+GET /api/word-cloud?source=title&category=游戏
 ```
 
 | 参数 | 类型 | 必填 | 默认值 | 说明 |
 |---|---|---|---|---|
+| `source` | string | 否 | `title` | 数据来源：`title`（标题）/ `comment`（评论）/ `danmaku`（弹幕） |
 | `category` | string | 否 | `全站` | 分区筛选，不传则返回全站 |
 
 ### 响应
@@ -663,10 +666,12 @@ GET /api/tag-cloud?category=游戏
   "code": 0,
   "message": "ok",
   "data": {
-    "tags": [
-      { "name": "鸣潮", "value": 4 },
-      { "name": "漫展", "value": 3 },
-      { "name": "生日会", "value": 3 }
+    "source": "comment",
+    "category": "游戏",
+    "words": [
+      { "name": "剧情", "value": 42 },
+      { "name": "操作", "value": 37 },
+      { "name": "画质", "value": 28 }
     ]
   }
 }
@@ -676,36 +681,118 @@ GET /api/tag-cloud?category=游戏
 
 | 字段 | 类型 | 说明 |
 |---|---|---|
-| `tags` | array | 标签列表（按 `value` 降序，最多 100 个） |
-| `tags[].name` | string | 标签名 |
-| `tags[].value` | int | 出现次数（>0） |
+| `source` | string | 数据来源类型 |
+| `category` | string | 分区名 |
+| `words` | array | 词列表（按 `value` 降序，最多 100 个） |
+| `words[].name` | string | 词 |
+| `words[].value` | int | 出现次数 |
 
-> **注意**：热门视频的 `tags` 原始字段全空（B站数据现象），词云来自 `scripts/run_tag_cloud_mr.sh` 对标题的 MapReduce 分词。
->
-> 无 `category` 参数或 `category` 为空字符串时，返回 `category='全站'` 的词云。
+> 三种 source 的语义：
+> - `title`：内容主题词云（视频标题分词）
+> - `comment`：观众讨论词云（评论内容分词）
+> - `danmaku`：即时反应词云（弹幕内容分词）
 
 ### 错误场景
 
 | 场景 | HTTP | code | message |
 |---|---|---|---|
-| 分区无标签数据 | `200` | `0` | `tags = []` |
+| `source` 非法 | `400` | `400` | `invalid source 'xxx', allowed: title, comment, danmaku` |
+| 无数据 | `200` | `0` | `words = []` |
 
 ### 示例
 
 ```bash
-# 全站词云
-curl "http://localhost:3000/api/tag-cloud"
+# 全站标题词云
+curl "http://localhost:9090/api/word-cloud"
 
-# 游戏分区词云
-curl "http://localhost:3000/api/tag-cloud?category=游戏"
+# 游戏分区评论词云
+curl "http://localhost:9090/api/word-cloud?source=comment&category=游戏"
 
-# 空字符串视为全站
-curl "http://localhost:3000/api/tag-cloud?category="
+# 全站弹幕词云
+curl "http://localhost:9090/api/word-cloud?source=danmaku"
 ```
 
 ---
 
-## 10. `/api/interaction`
+## 10. `/api/hot-comments`
+
+热门评论排行，按点赞数排序。
+
+### 请求
+
+```
+GET /api/hot-comments?category=游戏&limit=20
+GET /api/hot-comments?bvid=BVxxx&limit=10
+```
+
+| 参数 | 类型 | 必填 | 默认值 | 说明 |
+|---|---|---|---|---|
+| `category` | string | 否 | 无 | 分区筛选 |
+| `bvid` | string | 否 | 无 | 单视频筛选（优先级高于 category） |
+| `limit` | int | 否 | `20` | 返回数量，0~100 |
+
+### 响应
+
+```json
+{
+  "code": 0,
+  "message": "ok",
+  "data": {
+    "comments": [
+      {
+        "bvid": "BV16YGC6XEco",
+        "title": "视频标题",
+        "category": "游戏",
+        "up_name": "UP主",
+        "user_name": "评论用户",
+        "content": "高赞评论内容",
+        "like_count": 5750,
+        "reply_count": 67,
+        "comment_time": "2026-06-02 12:00:00"
+      }
+    ]
+  }
+}
+```
+
+### 字段说明
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `comments` | array | 评论列表（按 `like_count` 降序） |
+| `comments[].bvid` | string | 视频 BV 号 |
+| `comments[].title` | string | 视频标题 |
+| `comments[].category` | string | 分区 |
+| `comments[].up_name` | string | UP 主名 |
+| `comments[].user_name` | string | 评论用户名 |
+| `comments[].content` | string | 评论内容 |
+| `comments[].like_count` | long | 点赞数 |
+| `comments[].reply_count` | long | 回复数 |
+| `comments[].comment_time` | string | 评论时间 |
+
+### 错误场景
+
+| 场景 | HTTP | code | message |
+|---|---|---|---|
+| `limit` 超出范围 | `400` | `400` | `limit must be between 0 and 100` |
+| 无数据 | `200` | `0` | `comments = []` |
+
+### 示例
+
+```bash
+# 全站热门评论
+curl "http://localhost:9090/api/hot-comments"
+
+# 游戏分区热门评论
+curl "http://localhost:9090/api/hot-comments?category=游戏"
+
+# 单视频热门评论
+curl "http://localhost:9090/api/hot-comments?bvid=BV16YGC6XEco&limit=10"
+```
+
+---
+
+## 11. `/api/interaction`
 
 单个视频的互动质量分析。
 
@@ -926,14 +1013,35 @@ export interface PartitionDetailData {
   top_ups: PartitionDetailUp[];
 }
 
-// ---- GET /api/tag-cloud ----
-export interface TagCloudItem {
+// ---- GET /api/word-cloud ----
+export interface WordCloudItem {
   name: string;
   value: number;
 }
 
-export interface TagCloudData {
-  tags: TagCloudItem[];
+export type WordCloudSource = 'title' | 'comment' | 'danmaku';
+
+export interface WordCloudData {
+  source: string;
+  category: string;
+  words: WordCloudItem[];
+}
+
+// ---- GET /api/hot-comments ----
+export interface HotCommentItem {
+  bvid: string;
+  title: string;
+  category: string;
+  up_name: string;
+  user_name: string;
+  content: string;
+  like_count: number;
+  reply_count: number;
+  comment_time: string | null;
+}
+
+export interface HotCommentsData {
+  comments: HotCommentItem[];
 }
 
 // ---- GET /api/interaction ----
@@ -1024,9 +1132,14 @@ curl "http://111.228.34.34:9091/api/lifecycle/top?limit=3"
 # 分区下钻
 curl "http://111.228.34.34:9091/api/partition-detail?category=游戏"
 
-# 标签词云
-curl http://111.228.34.34:9091/api/tag-cloud
-curl "http://111.228.34.34:9091/api/tag-cloud?category=游戏"
+# 词云（标题/评论/弹幕）
+curl http://111.228.34.34:9091/api/word-cloud
+curl "http://111.228.34.34:9091/api/word-cloud?source=comment&category=游戏"
+curl "http://111.228.34.34:9091/api/word-cloud?source=danmaku"
+
+# 热门评论
+curl http://111.228.34.34:9091/api/hot-comments
+curl "http://111.228.34.34:9091/api/hot-comments?category=游戏"
 
 # 互动质量
 curl "http://111.228.34.34:9091/api/interaction?bvid=BV16YGC6XEco"

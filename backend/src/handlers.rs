@@ -350,38 +350,125 @@ pub async fn partition_detail(
     })))
 }
 
-pub async fn tag_cloud(
+pub async fn word_cloud(
     State(pool): State<MySqlPool>,
-    Query(query): Query<TagCloudQuery>,
-) -> Result<Json<ApiResponse<TagCloudData>>, AppError> {
-    let category = match query.category {
-        Some(c) if !c.is_empty() => c,
-        _ => "全站".to_string(),
+    Query(query): Query<WordCloudQuery>,
+) -> Result<Json<ApiResponse<WordCloudData>>, AppError> {
+    let source = match query.source.as_deref() {
+        Some("title") | Some("comment") | Some("danmaku") => {
+            query.source.unwrap()
+        }
+        Some(other) => {
+            return Err(AppError::bad_request(format!(
+                "invalid source '{}', allowed: title, comment, danmaku",
+                other
+            )));
+        }
+        None => "title".to_string(),
     };
 
+    let category = query.category.unwrap_or_else(|| "全站".to_string());
+
     let rows = sqlx::query_as!(
-        TagCloudRow,
+        WordCloudRow,
         r#"SELECT
-            tag AS `name: String`,
-            tag_count AS `value: i32`
-        FROM ads_tag_cloud
-        WHERE category = ?
-        ORDER BY tag_count DESC
+            word AS `name: String`,
+            word_count AS `value: i32`
+        FROM ads_word_cloud
+        WHERE source_type = ? AND category = ?
+        ORDER BY word_count DESC
         LIMIT 100"#,
+        source,
         category
     )
     .fetch_all(&pool)
     .await?;
 
-    let tags = rows
+    let words = rows
         .into_iter()
-        .map(|r| TagCloudItem {
+        .map(|r| WordCloudItem {
             name: r.name.unwrap_or_default(),
             value: r.value.unwrap_or(0),
         })
         .collect();
 
-    Ok(Json(ApiResponse::ok(TagCloudData { tags })))
+    Ok(Json(ApiResponse::ok(WordCloudData {
+        source,
+        category,
+        words,
+    })))
+}
+
+pub async fn hot_comments(
+    State(pool): State<MySqlPool>,
+    Query(query): Query<HotCommentsQuery>,
+) -> Result<Json<ApiResponse<HotCommentsData>>, AppError> {
+    let limit = query.limit.unwrap_or(20);
+    if limit < 0 || limit > 100 {
+        return Err(AppError::bad_request("limit must be between 0 and 100"));
+    }
+
+    if limit == 0 {
+        return Ok(Json(ApiResponse::ok(HotCommentsData {
+            comments: vec![],
+        })));
+    }
+
+    let rows = match (&query.bvid, &query.category) {
+        (Some(bvid), _) => {
+            sqlx::query_as!(
+                HotCommentRow,
+                r#"SELECT
+                    bvid, title, category, up_name, user_name, content,
+                    like_count, reply_count,
+                    DATE_FORMAT(comment_time, '%Y-%m-%d %H:%i:%s') AS `comment_time: String`
+                FROM ads_hot_comments
+                WHERE bvid = ?
+                ORDER BY like_count DESC
+                LIMIT ?"#,
+                bvid,
+                limit
+            )
+            .fetch_all(&pool)
+            .await?
+        }
+        (_, Some(category)) => {
+            sqlx::query_as!(
+                HotCommentRow,
+                r#"SELECT
+                    bvid, title, category, up_name, user_name, content,
+                    like_count, reply_count,
+                    DATE_FORMAT(comment_time, '%Y-%m-%d %H:%i:%s') AS `comment_time: String`
+                FROM ads_hot_comments
+                WHERE category = ?
+                ORDER BY like_count DESC
+                LIMIT ?"#,
+                category,
+                limit
+            )
+            .fetch_all(&pool)
+            .await?
+        }
+        _ => {
+            sqlx::query_as!(
+                HotCommentRow,
+                r#"SELECT
+                    bvid, title, category, up_name, user_name, content,
+                    like_count, reply_count,
+                    DATE_FORMAT(comment_time, '%Y-%m-%d %H:%i:%s') AS `comment_time: String`
+                FROM ads_hot_comments
+                ORDER BY like_count DESC
+                LIMIT ?"#,
+                limit
+            )
+            .fetch_all(&pool)
+            .await?
+        }
+    };
+
+    let comments = rows.into_iter().map(HotCommentItem::from).collect();
+
+    Ok(Json(ApiResponse::ok(HotCommentsData { comments })))
 }
 
 pub async fn interaction(
