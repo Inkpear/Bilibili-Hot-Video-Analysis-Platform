@@ -240,18 +240,6 @@ export default function HotVideoTable() {
 }
 
 function HoverCard({ video, pos }: { video: HotVideoItem; pos: { x: number; y: number } }) {
-  const cardRef = useRef<HTMLDivElement>(null)
-  const [adjusted, setAdjusted] = useState(false)
-
-  useEffect(() => {
-    if (cardRef.current) {
-      const rect = cardRef.current.getBoundingClientRect()
-      if (rect.right > window.innerWidth) {
-        setAdjusted(true)
-      }
-    }
-  }, [pos])
-
   const rates = video.view_count > 0 ? {
     like: video.like_count / video.view_count,
     coin: video.coin_count / video.view_count,
@@ -260,16 +248,30 @@ function HoverCard({ video, pos }: { video: HotVideoItem; pos: { x: number; y: n
     share: video.share_count / video.view_count,
   } : null
 
+  const cardW = 260
+  const cardH = 220
+  const pad = 12
+
+  let left = pos.x + pad
+  let top = pos.y + pad
+
+  if (left + cardW > window.innerWidth - pad) {
+    left = pos.x - cardW - pad
+  }
+  if (top + cardH > window.innerHeight - pad) {
+    top = pos.y - cardH - pad
+  }
+  if (left < pad) left = pad
+  if (top < pad) top = pad
+
   return (
     <div
-      ref={cardRef}
-      className="fixed z-50 pointer-events-none animate-fade-in"
-      style={{
-        left: adjusted ? pos.x - 280 : pos.x + 16,
-        top: pos.y - 40,
-      }}
+      className="fixed pointer-events-none animate-fade-in"
+      style={{ left, top, zIndex: 9999 }}
     >
-      <div className="bg-bg-card border border-border-bili rounded-lg shadow-2xl p-3 w-[260px]">
+      <div className="bg-bg-card border border-bili-blue/30 rounded-lg shadow-2xl p-3 w-[260px]"
+        style={{ boxShadow: '0 8px 32px rgba(0,0,0,0.5), 0 0 0 1px rgba(0,161,214,0.15)' }}
+      >
         <div className="text-sm font-medium text-text-primary mb-2 line-clamp-1">{video.title}</div>
         <div className="flex items-center gap-2 mb-3">
           <span className="text-xs text-bili-blue">{video.up_name}</span>
