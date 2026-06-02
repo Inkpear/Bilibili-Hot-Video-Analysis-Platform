@@ -6,7 +6,7 @@
 >
 > 技术栈: Rust Axum + sqlx (MySQL)
 >
-> 更新时间: 2026-06-01
+> 更新时间: 2026-06-02
 
 ---
 
@@ -21,11 +21,11 @@
 7. [/api/lifecycle](#7-apilifecycle)
 8. [/api/lifecycle/top](#8-apilifecycletop)
 9. [/api/partition-detail](#9-apipartition-detail)
-9. [/api/word-cloud](#9-apiword-cloud)
-10. [/api/hot-comments](#10-apihot-comments)
-11. [/api/interaction](#11-apiinteraction)
-12. [错误码与状态码](#12-错误码与状态码)
-13. [TypeScript 类型定义](#13-typescript-类型定义)
+10. [/api/word-cloud](#10-apiword-cloud)
+11. [/api/hot-comments](#11-apihot-comments)
+12. [/api/interaction](#12-apiinteraction)
+13. [错误码与状态码](#13-错误码与状态码)
+14. [TypeScript 类型定义](#14-typescript-类型定义)
 
 ---
 
@@ -66,11 +66,15 @@
 - 分区名: 中文，如 `游戏`、`动画`、`音乐` 等
 - BV 号: `BV` 开头，如 `BV16YGC6XEco`
 
+### CORS
+
+服务端开启 `CorsLayer::permissive()`，允许任意来源跨域请求。
+
 ### 空数据处理
 
 | 场景 | 返回 |
 |---|---|
-| 列表为空 | `data.videos = []`、`data.partitions = []`、`data.tags = []` |
+| 列表为空 | `data.videos = []`、`data.partitions = []`、`data.words = []`、`data.comments = []` |
 | 单资源不存在 | `data = null` |
 | overview 无数据 | 计数字段为 `0`，`latest_snapshot_date = null` |
 
@@ -173,7 +177,7 @@ curl -H "Authorization: Bearer wrong_token" http://localhost:9090/api/overview
 
 ---
 
-## 3. `/api/overview`
+## 4. `/api/overview`
 
 大屏总览指标。
 
@@ -237,7 +241,7 @@ GET /api/overview
 
 ---
 
-## 4. `/api/hot-videos`
+## 5. `/api/hot-videos`
 
 热门视频排行，支持排序和分页。
 
@@ -334,7 +338,7 @@ curl "http://localhost:9090/api/hot-videos?sort=invalid"
 
 ---
 
-## 5. `/api/partition-compare`
+## 6. `/api/partition-compare`
 
 分区竞争力对比，返回各分区的聚合指标。
 
@@ -401,7 +405,7 @@ GET /api/partition-compare
 
 ---
 
-## 6. `/api/lifecycle`
+## 7. `/api/lifecycle`
 
 单个视频的生命周期时间线。
 
@@ -484,7 +488,7 @@ GET /api/lifecycle?bvid=BV16YGC6XEco
 
 ---
 
-## 7. `/api/lifecycle/top`
+## 8. `/api/lifecycle/top`
 
 TOP N 热门视频的生命周期。
 
@@ -544,6 +548,8 @@ GET /api/lifecycle/top?limit=5
 > 若实际数量不足 `limit`，返回全部（不报错）。
 >
 > `limit=0` 时返回空数组。
+>
+> 无生命周期数据时返回 `videos = []`。
 
 ### 错误场景
 
@@ -553,7 +559,7 @@ GET /api/lifecycle/top?limit=5
 
 ---
 
-## 8. `/api/partition-detail`
+## 9. `/api/partition-detail`
 
 分区下钻详情，包含分区概要、热门视频和 TOP UP 主。
 
@@ -644,7 +650,7 @@ curl "http://localhost:9090/api/partition-detail?category=不存在分区"
 
 ---
 
-## 9. `/api/word-cloud`
+## 10. `/api/word-cloud`
 
 统一词云接口，支持标题词云、评论词云、弹幕词云三种 source。
 
@@ -714,7 +720,7 @@ curl "http://localhost:9090/api/word-cloud?source=danmaku"
 
 ---
 
-## 10. `/api/hot-comments`
+## 11. `/api/hot-comments`
 
 热门评论排行，按点赞数排序。
 
@@ -728,7 +734,7 @@ GET /api/hot-comments?bvid=BVxxx&limit=10
 | 参数 | 类型 | 必填 | 默认值 | 说明 |
 |---|---|---|---|---|
 | `category` | string | 否 | 无 | 分区筛选 |
-| `bvid` | string | 否 | 无 | 单视频筛选（优先级高于 category） |
+| `bvid` | string | 否 | 无 | 单视频筛选（同时传 `bvid` 和 `category` 时，仅 `bvid` 生效） |
 | `limit` | int | 否 | `20` | 返回数量，0~100 |
 
 ### 响应
@@ -768,7 +774,7 @@ GET /api/hot-comments?bvid=BVxxx&limit=10
 | `comments[].content` | string | 评论内容 |
 | `comments[].like_count` | long | 点赞数 |
 | `comments[].reply_count` | long | 回复数 |
-| `comments[].comment_time` | string | 评论时间 |
+| `comments[].comment_time` | string\|null | 评论时间，可能为空 |
 
 ### 错误场景
 
@@ -792,7 +798,7 @@ curl "http://localhost:9090/api/hot-comments?bvid=BV16YGC6XEco&limit=10"
 
 ---
 
-## 11. `/api/interaction`
+## 12. `/api/interaction`
 
 单个视频的互动质量分析。
 
@@ -859,7 +865,7 @@ GET /api/interaction?bvid=BV16YGC6XEco
 
 ---
 
-## 12. 错误码与状态码
+## 13. 错误码与状态码
 
 ### HTTP 状态码映射
 
@@ -900,7 +906,7 @@ GET /api/interaction?bvid=BV16YGC6XEco
 
 ---
 
-## 13. TypeScript 类型定义
+## 14. TypeScript 类型定义
 
 > 以下类型与 API JSON 一一对应，前端可直接用于 `types/index.ts`。
 
