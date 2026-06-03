@@ -462,6 +462,7 @@ GROUP BY v.category;
 DROP TABLE IF EXISTS ads_word_cloud;
 CREATE TABLE ads_word_cloud (
     source_type  STRING,
+    bvid         STRING,
     category     STRING,
     word         STRING,
     word_count   INT
@@ -502,9 +503,9 @@ LIMIT 5000;
 
 INSERT OVERWRITE TABLE ads_word_cloud
 -- 标题词云数据（由 MapReduce 生成，此处仅建空表框架）
-SELECT source_type, category, word, word_count
+SELECT source_type, bvid, category, word, word_count
 FROM (
-    SELECT 'title' AS source_type, '__ALL__' AS category, '__placeholder__' AS word, 0 AS word_count
+    SELECT 'title' AS source_type, '' AS bvid, '__ALL__' AS category, '__placeholder__' AS word, 0 AS word_count
 ) t
 WHERE 1 = 0;
 

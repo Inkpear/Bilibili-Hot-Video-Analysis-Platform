@@ -517,6 +517,7 @@ pub struct InteractionQuery {
 pub struct WordCloudQuery {
     pub source: Option<String>,
     pub category: Option<String>,
+    pub bvid: Option<String>,
 }
 
 #[derive(Debug, serde::Deserialize)]

@@ -1,6 +1,9 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-"""Hadoop Streaming mapper for title word count.
+"""Hadoop Streaming mapper for word count with bvid dimension.
+
+Input:  bvid \t category \t text
+Output: bvid \t category \t word \t 1
 
 Compatible with Python 2.7 on CentOS 7 Hadoop nodes and Python 3 locally.
 """
@@ -75,12 +78,12 @@ def fallback_cut(text):
             yield chunk
 
 
-def cut_words(title):
+def cut_words(text):
     if jieba is not None:
-        for word in jieba.lcut(title):
+        for word in jieba.lcut(text):
             yield word.strip().lower()
         return
-    for word in fallback_cut(title):
+    for word in fallback_cut(text):
         yield word
 
 
@@ -96,8 +99,8 @@ def keep_word(word):
     return True
 
 
-def emit(category, word):
-    write_line(u"%s\t%s\t1" % (category, word))
+def emit(bvid, category, word):
+    write_line(u"%s\t%s\t%s\t1" % (bvid, category, word))
 
 
 def main():
@@ -105,17 +108,18 @@ def main():
         line = to_text(raw).rstrip(u"\n")
         if not line:
             continue
-        parts = line.split(u"\t", 1)
-        if len(parts) != 2:
+        parts = line.split(u"\t", 2)
+        if len(parts) != 3:
             continue
-        category, title = parts[0].strip(), parts[1].strip()
-        if not category or not title:
+        bvid, category, text = parts[0].strip(), parts[1].strip(), parts[2].strip()
+        if not bvid or not text:
             continue
 
-        words = set(word for word in cut_words(title) if keep_word(word))
+        words = set(word for word in cut_words(text) if keep_word(word))
         for word in sorted(words):
-            emit(u"__ALL__", word)
-            emit(category, word)
+            emit(bvid, category, word)
+            if category != u"__ALL__":
+                emit(bvid, u"__ALL__", word)
 
 
 if __name__ == "__main__":

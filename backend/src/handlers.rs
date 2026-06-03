@@ -367,21 +367,41 @@ pub async fn word_cloud(
 
     let category_input = query.category.unwrap_or_else(|| "全站".to_string());
     let db_category = if category_input == "全站" { "__ALL__" } else { &category_input };
+    let bvid = query.bvid.unwrap_or_default();
 
-    let rows = sqlx::query_as!(
-        WordCloudRow,
-        r#"SELECT
-            word AS `name: String`,
-            word_count AS `value: i32`
-        FROM ads_word_cloud
-        WHERE source_type = ? AND category = ?
-        ORDER BY word_count DESC
-        LIMIT 100"#,
-        source,
-        db_category
-    )
-    .fetch_all(&pool)
-    .await?;
+    let rows = if bvid.is_empty() {
+        sqlx::query_as!(
+            WordCloudRow,
+            r#"SELECT
+                word AS `name: String`,
+                SUM(word_count) AS `value: i32`
+            FROM ads_word_cloud
+            WHERE source_type = ? AND category = ?
+            GROUP BY word
+            ORDER BY SUM(word_count) DESC
+            LIMIT 100"#,
+            source,
+            db_category
+        )
+        .fetch_all(&pool)
+        .await?
+    } else {
+        sqlx::query_as!(
+            WordCloudRow,
+            r#"SELECT
+                word AS `name: String`,
+                SUM(word_count) AS `value: i32`
+            FROM ads_word_cloud
+            WHERE source_type = ? AND bvid = ?
+            GROUP BY word
+            ORDER BY SUM(word_count) DESC
+            LIMIT 100"#,
+            source,
+            bvid
+        )
+        .fetch_all(&pool)
+        .await?
+    };
 
     let words = rows
         .into_iter()
