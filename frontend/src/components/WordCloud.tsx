@@ -54,8 +54,10 @@ export default function WordCloud() {
     }
   }, [carousel.on, selectedBvid, carousel.wordCloud.commentShown, carousel.wordCloud.danmakuShown]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const hideTitleCloud = !!selectedBvid
-  const effectiveSource: WordCloudSource = hideTitleCloud ? wordCloudSource : 'title'
+  const hasVideo = !!selectedBvid
+  const effectiveSource = hasVideo
+    ? (wordCloudSource === 'title' ? 'comment' : wordCloudSource)
+    : wordCloudSource
 
   const categoryParam = selectedCategory ?? undefined
   const bvidParam = selectedBvid ?? undefined
@@ -116,44 +118,43 @@ export default function WordCloud() {
     : {}
 
   const wcDone = carousel.on && carousel.wordCloud.commentShown && carousel.wordCloud.danmakuShown
+  const sources: WordCloudSource[] = hasVideo ? ['comment', 'danmaku'] : ['title', 'comment', 'danmaku']
 
-  const extra = hideTitleCloud
-    ? (
-      <div className="flex items-center gap-2">
-        {selectedWord && (
+  const extra = (
+    <div className="flex items-center gap-2">
+      {selectedWord && (
+        <button
+          onClick={() => setSelectedWord(null)}
+          className="px-1.5 py-0.5 text-[10px] rounded bg-bili-pink/20 text-bili-pink hover:bg-bili-pink/30 transition-colors"
+        >
+          {selectedWord} ✕
+        </button>
+      )}
+      <div className="flex gap-1">
+        {sources.map((s) => (
           <button
-            onClick={() => setSelectedWord(null)}
-            className="px-1.5 py-0.5 text-[10px] rounded bg-bili-pink/20 text-bili-pink hover:bg-bili-pink/30 transition-colors"
+            key={s}
+            onClick={() => { if (!carousel.on) setWordCloudSource(s) }}
+            className={`px-2 py-0.5 text-xs rounded transition-colors ${
+              effectiveSource === s
+                ? 'bg-bili-blue text-white'
+                : 'text-text-muted hover:text-text-secondary'
+            } ${carousel.on ? 'opacity-50 cursor-not-allowed' : ''}`}
           >
-            {selectedWord} ✕
+            {SOURCE_LABELS[s]}
+            {carousel.on && s !== 'title' && carousel.wordCloud[`${s}Shown`] && (
+              <span className="ml-1 text-positive">✓</span>
+            )}
           </button>
+        ))}
+        {wcDone && (
+          <span className="px-1.5 py-0.5 text-[10px] rounded bg-positive/20 text-positive">完成</span>
         )}
-        <div className="flex gap-1">
-          {(['comment', 'danmaku'] as const).map((s) => (
-            <button
-              key={s}
-              onClick={() => { if (!carousel.on) setWordCloudSource(s) }}
-              className={`px-2 py-0.5 text-xs rounded transition-colors ${
-                wordCloudSource === s
-                  ? 'bg-bili-blue text-white'
-                  : 'text-text-muted hover:text-text-secondary'
-              } ${carousel.on ? 'opacity-50 cursor-not-allowed' : ''}`}
-            >
-              {SOURCE_LABELS[s]}
-              {carousel.on && carousel.wordCloud[`${s}Shown`] && (
-                <span className="ml-1 text-positive">✓</span>
-              )}
-            </button>
-          ))}
-          {wcDone && (
-            <span className="px-1.5 py-0.5 text-[10px] rounded bg-positive/20 text-positive">完成</span>
-          )}
-        </div>
       </div>
-    )
-    : undefined
+    </div>
+  )
 
-  const title = hideTitleCloud ? '词云' : '标题词云'
+  const title = hasVideo ? '视频词云' : '词云'
 
   return (
     <Card title={title} extra={extra} className="h-full">
