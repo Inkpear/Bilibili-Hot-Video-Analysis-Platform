@@ -29,7 +29,7 @@ echo "[0/4] 集群健康检查..."
 
 check_port() {
     local host="$1" port="$2" name="$3"
-    if ! $SSH_CMD "nc -z ${host} ${port}" 2>/dev/null; then
+    if ! $SSH_CMD "netstat -tlnp 2>/dev/null | grep -q ':${port} '" 2>/dev/null; then
         echo "  [WARN] ${name} (port ${port}) 不可达，尝试启动..."
         return 1
     fi
@@ -47,14 +47,14 @@ echo "  [OK] HDFS"
 
 # 检查 Hive Metastore (9083)
 if ! check_port "$MASTER_HOST" 9083 "Hive Metastore"; then
-    $SSH_CMD "sudo systemctl start hive-metastore.service" 2>&1
+    $SSH_CMD "echo '${HADOOP_PASS}' | sudo -S systemctl start hive-metastore.service" 2>&1
     sleep 10
     check_port "$MASTER_HOST" 9083 "Hive Metastore" || { echo "  [FAIL] Hive Metastore 启动失败"; exit 1; }
 fi
 
 # 检查 HiveServer2 (10000)
 if ! check_port "$MASTER_HOST" 10000 "HiveServer2"; then
-    $SSH_CMD "sudo systemctl start hive-server2.service" 2>&1
+    $SSH_CMD "echo '${HADOOP_PASS}' | sudo -S systemctl start hive-server2.service" 2>&1
     sleep 30
     check_port "$MASTER_HOST" 10000 "HiveServer2" || { echo "  [FAIL] HiveServer2 启动失败"; exit 1; }
 fi
