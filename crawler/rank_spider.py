@@ -80,62 +80,67 @@ def collect_popular(snapshot_id: str, db) -> list[dict]:
 
 
 def collect_rankings(snapshot_id: str, db) -> list[dict]:
-    """采集 9 个分区热门（使用 popular 接口，返回近期热门视频）。"""
+    """采集 9 个分区热门（每分区 2 页×50 条 = 100 条）。"""
     rows = []
     collect_time = timestamp_now_ms()
 
     for cat_name, rid in CATEGORY_RIDS.items():
-        data = api_get_safe(
-            "/x/web-interface/popular",
-            {"rid": rid, "ps": 50, "pn": 1},
-            need_cookie=False,
-        )
-        if data is None:
-            logger.warning(f"  分区 {cat_name}(rid={rid}) 采集失败，跳过")
-            continue
-
-        items = data.get("data", {}).get("list", [])
-        for idx, item in enumerate(items):
-            bvid = item.get("bvid", "")
-            if not bvid:
+        cat_count = 0
+        for pn in range(1, POPULAR_PAGES + 1):
+            data = api_get_safe(
+                "/x/web-interface/popular",
+                {"rid": rid, "ps": POPULAR_PS, "pn": pn},
+                need_cookie=False,
+            )
+            if data is None:
+                logger.warning(f"  分区 {cat_name}(rid={rid}) 第{pn}页采集失败，跳过")
                 continue
 
-            stat = item.get("stat", {})
-            owner = item.get("owner", {})
-            tname = item.get("tname", "")
-            category = map_tname(tname)
+            items = data.get("data", {}).get("list", [])
+            for idx, item in enumerate(items):
+                bvid = item.get("bvid", "")
+                if not bvid:
+                    continue
 
-            row = {
-                "bvid": bvid,
-                "title": item.get("title", ""),
-                "description": "",
-                "category": category if category != "其他" else cat_name,
-                "sub_category": tname,
-                "tags": "",
-                "duration": item.get("duration", 0),
-                "publish_time": item.get("pubdate", 0),
-                "up_id": str(owner.get("mid", "")),
-                "up_name": owner.get("name", ""),
-                "up_avatar": owner.get("face", ""),
-                "url": f"https://www.bilibili.com/video/{bvid}",
-                "aid": item.get("aid", 0),
-                "cid": item.get("cid", 0),
-                "rank_source": RANK_SOURCE_RANKING,
-                "rank_name": f"{cat_name}热门",
-                "view_count": stat.get("view", 0),
-                "like_count": stat.get("like", 0),
-                "coin_count": stat.get("coin", 0),
-                "favorite_count": stat.get("favorite", 0),
-                "share_count": stat.get("share", 0),
-                "reply_count": stat.get("reply", 0),
-                "danmaku_count": stat.get("danmaku", 0),
-                "rank_position": idx + 1,
-                "snapshot_id": snapshot_id,
-                "collect_time": collect_time,
-            }
-            rows.append(row)
+                stat = item.get("stat", {})
+                owner = item.get("owner", {})
+                tname = item.get("tname", "")
+                category = map_tname(tname)
 
-        logger.info(f"  分区 {cat_name}: {len(items)} 条")
+                rank_position = (pn - 1) * POPULAR_PS + idx + 1
+
+                row = {
+                    "bvid": bvid,
+                    "title": item.get("title", ""),
+                    "description": "",
+                    "category": category if category != "其他" else cat_name,
+                    "sub_category": tname,
+                    "tags": "",
+                    "duration": item.get("duration", 0),
+                    "publish_time": item.get("pubdate", 0),
+                    "up_id": str(owner.get("mid", "")),
+                    "up_name": owner.get("name", ""),
+                    "up_avatar": owner.get("face", ""),
+                    "url": f"https://www.bilibili.com/video/{bvid}",
+                    "aid": item.get("aid", 0),
+                    "cid": item.get("cid", 0),
+                    "rank_source": RANK_SOURCE_RANKING,
+                    "rank_name": f"{cat_name}热门",
+                    "view_count": stat.get("view", 0),
+                    "like_count": stat.get("like", 0),
+                    "coin_count": stat.get("coin", 0),
+                    "favorite_count": stat.get("favorite", 0),
+                    "share_count": stat.get("share", 0),
+                    "reply_count": stat.get("reply", 0),
+                    "danmaku_count": stat.get("danmaku", 0),
+                    "rank_position": rank_position,
+                    "snapshot_id": snapshot_id,
+                    "collect_time": collect_time,
+                }
+                rows.append(row)
+                cat_count += 1
+
+        logger.info(f"  分区 {cat_name}: {cat_count} 条")
 
     logger.info(f"  分区热门合计: {len(rows)} 条")
     return rows
