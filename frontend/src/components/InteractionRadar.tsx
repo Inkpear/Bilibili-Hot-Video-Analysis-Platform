@@ -103,10 +103,17 @@ export default function InteractionRadar() {
         formatter: () => {
           const prefix = isOverview ? '样本最大' : '当前视频'
           const lines = rates.map((v, i) => {
-            const bar = getBar(v, EXCELLENT_MAX[i])
-            return `${LABELS[i]}：${formatPercent(v)} ${bar}`
+            const pct = Math.min(v / EXCELLENT_MAX[i], 1) * 100
+            const color = isOverview ? '#FB7299' : '#00A1D6'
+            return `<div style="display:flex;align-items:center;gap:8px;margin:3px 0">
+              <span style="width:36px;text-align:right;font-size:11px;color:#8B949E">${LABELS[i]}</span>
+              <span style="font-family:JetBrains Mono,monospace;font-size:11px;width:42px;text-align:right">${formatPercent(v)}</span>
+              <span style="flex:1;height:6px;background:#21262D;border-radius:3px;overflow:hidden">
+                <span style="display:block;height:100%;width:${pct}%;background:${color};border-radius:3px"></span>
+              </span>
+            </div>`
           })
-          return `<div style="font-size:12px"><b>${prefix}</b><br/>${lines.join('<br/>')}</div>`
+          return `<div style="font-size:12px;padding:2px"><b style="color:#E6EDF3">${prefix}</b>${lines.join('')}</div>`
         },
       },
       series: [
@@ -166,10 +173,4 @@ export default function InteractionRadar() {
       )}
     </Card>
   )
-}
-
-function getBar(value: number, max: number): string {
-  const ratio = Math.min(value / max, 1)
-  const filled = Math.round(ratio * 5)
-  return '█'.repeat(filled) + '░'.repeat(5 - filled)
 }
