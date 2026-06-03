@@ -122,6 +122,13 @@ def collect_danmaku(bvid: str, cid: int, db) -> tuple[list[dict] | None, bool]:
                 success = False
             break
 
+        if len(resp.content) <= 39:
+            logger.warning(
+                f"  弹幕 seg={segment}: 空响应 ({len(resp.content)} bytes)，IP限流，停止"
+            )
+            _record_429()
+            break
+
         elems = parse_danmaku_seg(resp.content)
         _reset_429_counter()
 

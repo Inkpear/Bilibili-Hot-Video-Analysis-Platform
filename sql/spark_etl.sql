@@ -282,11 +282,8 @@ WITH latest_collect AS (
     SELECT MAX(snapshot_id) AS max_sid FROM dwd_video_snapshot
 ),
 top_videos AS (
-    SELECT s.bvid
+    SELECT DISTINCT s.bvid
     FROM dwd_video_snapshot s
-    JOIN latest_collect lc ON s.snapshot_id = lc.max_sid
-    ORDER BY s.view_count DESC
-    LIMIT 100
 )
 SELECT
     s.bvid,
@@ -497,9 +494,7 @@ SELECT
     c.comment_time
 FROM dwd_comment_info c
 JOIN dwd_video_info v ON c.bvid = v.bvid
-WHERE c.content IS NOT NULL AND c.content != ''
-ORDER BY c.like_count DESC
-LIMIT 5000;
+WHERE c.content IS NOT NULL AND c.content != '';
 
 INSERT OVERWRITE TABLE ads_word_cloud
 -- 标题词云数据（由 MapReduce 生成，此处仅建空表框架）

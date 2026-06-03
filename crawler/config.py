@@ -61,8 +61,8 @@ MAX_COMMENTS = 200     # 每视频评论上限
 MAX_DANMAKU = 3000     # 每视频弹幕上限
 
 # ---- 弹幕全局冷却 ----
-DANMAKU_429_COOLDOWN = 120           # 连续429后全局冷却 (秒)
-MAX_CONSECUTIVE_DANMAKU_429 = 10     # 连续多少段429后触发冷却
+DANMAKU_429_COOLDOWN = 60            # 连续429后全局冷却 (秒)
+MAX_CONSECUTIVE_DANMAKU_429 = 3      # 连续多少段限流后触发冷却
 
 # ---- 永久放弃阈值 ----
 MAX_FAIL_COUNT = 3                   # 连续失败 N 次后永久放弃
