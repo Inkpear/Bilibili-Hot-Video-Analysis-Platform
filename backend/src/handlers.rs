@@ -365,7 +365,8 @@ pub async fn word_cloud(
         None => "title".to_string(),
     };
 
-    let category = query.category.unwrap_or_else(|| "全站".to_string());
+    let category_input = query.category.unwrap_or_else(|| "全站".to_string());
+    let db_category = if category_input == "全站" { "__ALL__" } else { &category_input };
 
     let rows = sqlx::query_as!(
         WordCloudRow,
@@ -377,7 +378,7 @@ pub async fn word_cloud(
         ORDER BY word_count DESC
         LIMIT 100"#,
         source,
-        category
+        db_category
     )
     .fetch_all(&pool)
     .await?;
@@ -392,7 +393,7 @@ pub async fn word_cloud(
 
     Ok(Json(ApiResponse::ok(WordCloudData {
         source,
-        category,
+        category: category_input,
         words,
     })))
 }

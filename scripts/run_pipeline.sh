@@ -80,8 +80,9 @@ $SSH_CMD "SOURCE_TYPE=danmaku bash /home/hadoop/scripts/run_tag_cloud_mr.sh" 2>&
 
 echo ""
 echo "[3.5/4] 合并词云到 ads_word_cloud..."
-$SSH_CMD "spark-sql --master spark://master:7077 -e \"
+$SSH_CMD "cat > /tmp/merge_word_cloud.sql << 'EOSQL'
 USE bilibili;
+
 INSERT OVERWRITE TABLE ads_word_cloud
 SELECT source_type, category, word, word_count
 FROM (
@@ -90,28 +91,23 @@ FROM (
            PARTITION BY source_type, category ORDER BY word_count DESC, word ASC
          ) AS rn
   FROM (
-    SELECT 'title' AS source_type,
-           CASE WHEN category = '__ALL__' THEN '全站' ELSE category END AS category,
-           word, word_count
+    SELECT 'title' AS source_type, category, word, word_count
     FROM mr_title_raw
     WHERE word IS NOT NULL AND word != '' AND word_count >= 2
     UNION ALL
-    SELECT 'comment' AS source_type,
-           CASE WHEN category = '__ALL__' THEN '全站' ELSE category END AS category,
-           word, word_count
+    SELECT 'comment' AS source_type, category, word, word_count
     FROM mr_comment_raw
     WHERE word IS NOT NULL AND word != '' AND word_count >= 2
     UNION ALL
-    SELECT 'danmaku' AS source_type,
-           CASE WHEN category = '__ALL__' THEN '全站' ELSE category END AS category,
-           word, word_count
+    SELECT 'danmaku' AS source_type, category, word, word_count
     FROM mr_danmaku_raw
     WHERE word IS NOT NULL AND word != '' AND word_count >= 2
   ) all_words
 ) ranked
-WHERE (category = '全站' AND rn <= 150)
-   OR (category != '全站' AND rn <= 100);
-\"" 2>&1 | tail -5
+WHERE (category = '__ALL__' AND rn <= 150)
+   OR (category != '__ALL__' AND rn <= 100);
+EOSQL
+spark-sql --master spark://master:7077 -f /tmp/merge_word_cloud.sql" 2>&1 | tail -5
 
 # Step 4: 导出到 MySQL
 echo ""
