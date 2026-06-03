@@ -90,7 +90,7 @@ export default function HotVideoTable() {
     }
   }, [sort]) // only depends on sort
 
-  // intersection observer — stable, only reconnects on sort change
+  // intersection observer — reconnects when sort changes or data finishes loading
   useEffect(() => {
     const sentinel = sentinelRef.current
     const scroll = scrollRef.current
@@ -104,7 +104,7 @@ export default function HotVideoTable() {
     )
     observer.observe(sentinel)
     return () => observer.disconnect()
-  }, [sort]) // only reconnects on sort change, not on loadMore
+  }, [sort, loading]) // reconnect on sort change or when loading finishes
 
   // scroll selected row into view — only when bvid actually changes
   useEffect(() => {
