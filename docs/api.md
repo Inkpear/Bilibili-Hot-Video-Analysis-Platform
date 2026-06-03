@@ -24,8 +24,9 @@
 10. [/api/word-cloud](#10-apiword-cloud)
 11. [/api/hot-comments](#11-apihot-comments)
 12. [/api/interaction](#12-apiinteraction)
-13. [错误码与状态码](#13-错误码与状态码)
-14. [TypeScript 类型定义](#14-typescript-类型定义)
+13. [/api/interaction-max](#13-apiinteraction-max)
+14. [错误码与状态码](#14-错误码与状态码)
+15. [TypeScript 类型定义](#15-typescript-类型定义)
 
 ---
 
@@ -171,9 +172,10 @@ curl -H "Authorization: Bearer wrong_token" http://localhost:9090/api/overview
 | `GET` | `/api/lifecycle` | 单视频生命周期 |
 | `GET` | `/api/lifecycle/top` | TOP N 热门视频生命周期 |
 | `GET` | `/api/partition-detail` | 分区下钻详情 |
-| `GET` | `/api/word-cloud` | 词云（标题/评论/弹幕） |
+| `GET` | `/api/word-cloud` | 词云（标题/评论/弹幕，支持 bvid 维度） |
 | `GET` | `/api/hot-comments` | 热门评论排行 |
 | `GET` | `/api/interaction` | 视频互动质量 |
+| `GET` | `/api/interaction-max` | 全局最大互动率（雷达图基准） |
 
 ---
 
@@ -865,7 +867,47 @@ GET /api/interaction?bvid=BV16YGC6XEco
 
 ---
 
-## 13. 错误码与状态码
+## 13. `/api/interaction-max`
+
+全局最大互动率，用于雷达图基准值。
+
+### 请求
+
+```
+GET /api/interaction-max
+```
+
+无参数。
+
+### 响应
+
+```json
+{
+  "code": 0,
+  "message": "ok",
+  "data": {
+    "max_like_rate": 0.2435,
+    "max_coin_rate": 0.1394,
+    "max_fav_rate": 0.0909,
+    "max_reply_rate": 0.0246
+  }
+}
+```
+
+### 字段说明
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `max_like_rate` | double | 全局最大点赞率 |
+| `max_coin_rate` | double | 全局最大投币率 |
+| `max_fav_rate` | double | 全局最大收藏率 |
+| `max_reply_rate` | double | 全局最大评论率 |
+
+> 用于雷达图的"优秀"基准线，前端雷达图各维度使用独立最大值而非统一最大值。
+
+---
+
+## 14. 错误码与状态码
 
 ### HTTP 状态码映射
 
@@ -906,7 +948,7 @@ GET /api/interaction?bvid=BV16YGC6XEco
 
 ---
 
-## 14. TypeScript 类型定义
+## 15. TypeScript 类型定义
 
 > 以下类型与 API JSON 一一对应，前端可直接用于 `types/index.ts`。
 
@@ -1064,6 +1106,14 @@ export interface InteractionData {
   fav_rate: number;
   reply_rate: number;
   share_rate: number;
+}
+
+// ---- GET /api/interaction-max ----
+export interface InteractionMaxData {
+  max_like_rate: number;
+  max_coin_rate: number;
+  max_fav_rate: number;
+  max_reply_rate: number;
 }
 ```
 

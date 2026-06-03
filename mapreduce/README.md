@@ -7,16 +7,16 @@
 - `comment`：评论词云（输入来自 `dwd_comment_info`）
 - `danmaku`：弹幕词云（输入来自 `dwd_danmaku_info`）
 
-输入每行格式：
+输入每行格式（bvid 维度）：
 
 ```text
-category<TAB>content
+bvid<TAB>category<TAB>text
 ```
 
-输出每行格式：
+输出每行格式（bvid 维度）：
 
 ```text
-category<TAB>word<TAB>word_count
+bvid<TAB>category<TAB>word<TAB>word_count
 ```
 
 mapper 会优先使用 `jieba`，节点没有 jieba 时自动退化为内置中文 n-gram 分词。
@@ -33,3 +33,7 @@ SOURCE_TYPE=title bash scripts/run_tag_cloud_mr.sh
 SOURCE_TYPE=comment bash scripts/run_tag_cloud_mr.sh
 SOURCE_TYPE=danmaku bash scripts/run_tag_cloud_mr.sh
 ```
+
+词云查询模式：
+- **聚合模式**（无 bvid 参数）：`GROUP BY word` 汇总所有视频的词频
+- **视频模式**（有 bvid 参数）：按 `bvid` 过滤，返回单个视频的词频

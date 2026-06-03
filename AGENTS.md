@@ -4,10 +4,10 @@
 
 ## Overview
 
-爬取 B站热门排行榜 7 天数据，经 HDFS → Hive → Spark SQL 处理后存入 MySQL，Rust Axum 提供只读 API，React + ECharts 展示交互大屏。
+爬取 B站 14 分区排行榜 7 天数据，经 HDFS → Hive → Spark SQL 处理后存入 MySQL，Rust Axum 提供只读 API，React + ECharts 展示交互大屏。
 
 ```
-Python requests 采集(NDJSON) → HDFS → Hive ODS → Spark SQL DWD/DWS/ADS → MapReduce 标题词云 → MySQL → Rust Axum → React
+Python requests 采集(NDJSON) → HDFS → Hive ODS → Spark SQL DWD/DWS/ADS → MapReduce 词云(bvid维度) → MySQL → Rust Axum → React
 ```
 
 ## Repo Layout
@@ -21,7 +21,7 @@ Bilibili-Hot-Video-Analysis-Platform/
 ├── crawler/                 # 采集脚本（已完成）
 ├── sql/                     # Hive/Spark/MySQL DDL 和 ETL SQL（已完成）
 ├── backend/src/             # Rust Axum 只读 API（已完成）
-├── frontend/src/            # React + ECharts 大屏（待实现）
+├── frontend/src/            # React + ECharts 大屏（开发中）
 ├── scripts/
 │   ├── deploy_crawler.sh    # 一键部署 crawler 到 WSL
 │   ├── extract_cookie.py    # 从浏览器提取 Cookie
@@ -30,7 +30,7 @@ Bilibili-Hot-Video-Analysis-Platform/
 │   ├── run_pipeline.sh      # 日常 ETL 管线
 │   ├── setup_pipeline.sh    # 首次初始化管线
 │   └── qemu/                # QEMU/libvirt 虚拟机管理脚本
-├── mapreduce/               # MapReduce 作业（标题词频统计）
+├── mapreduce/               # MapReduce 作业（标题/评论/弹幕词频统计，bvid 维度）
 ├── output/                  # 采集数据
 ├── report/                  # 课程报告
 └── ppt/                     # 答辩 PPT
@@ -40,17 +40,18 @@ Bilibili-Hot-Video-Analysis-Platform/
 
 | 项 | 决定 |
 |---|---|
-| 数据来源 | 全站热门 + 9 分区排行 |
+| 数据来源 | 14 分区排行 (ranking/v2) |
 | 采集窗口 | 7 天，每天 1 轮，共 7 轮 |
 | 评论上限 | 200 条/视频（去重后只采一次） |
 | 弹幕 | 段式 seg.so API，protobuf 自解析，3000 条/视频（去重后只采一次） |
-| 分区 | 动画、游戏、娱乐、生活、音乐、舞蹈、科技、知识、影视 |
+| 弹幕限流检测 | 检测 39 字节空响应（IP 限流），立即停止；连续 3 次限流触发全局冷却 60s |
+| 分区 | 动画、游戏、娱乐、音乐、舞蹈、科技、知识、影视、鬼畜、美食、汽车、时尚美妆、体育运动、动物（14 个） |
 | 输出格式 | NDJSON（每行一个 JSON 对象），含 aid/cid/collect_time/category/snapshot_id |
 | 存储 | ODS/DWD/DWS → Hive；ADS → MySQL（Spark JDBC 导出） |
 | 前端 | React 18 + TypeScript + ECharts |
-| 后端 | Rust Axum，10 个 GET 端点，端口 9090，CORS 全开 |
+| 后端 | Rust Axum，11 个 GET 端点，端口 9090，CORS 全开 |
 | 错误码 | 0=成功，400=参数错误，500=内部错误 |
-| 词云 | Hadoop Streaming + Python3/jieba，统一 ads_word_cloud 表（title/comment/danmaku） |
+| 词云 | Hadoop Streaming + Python3/jieba，统一 ads_word_cloud 表（title/comment/danmaku，bvid 维度） |
 
 ## Cluster Architecture
 
@@ -147,11 +148,12 @@ curl "http://localhost:9090/api/word-cloud"
 curl "http://localhost:9090/api/word-cloud?source=comment&category=游戏"
 curl "http://localhost:9090/api/hot-comments"
 curl "http://localhost:9090/api/interaction?bvid=BVxxx"
+curl http://localhost:9090/api/interaction-max
 ```
 
 ## API Contract
 
-10 个只读端点，统一响应 `{"code":0,"message":"ok","data":{...}}`：
+11 个只读端点，统一响应 `{"code":0,"message":"ok","data":{...}}`：
 
 | 端点 | 用途 |
 |---|---|
@@ -161,9 +163,10 @@ curl "http://localhost:9090/api/interaction?bvid=BVxxx"
 | `GET /api/lifecycle?bvid=BVxxx` | 单视频生命周期 |
 | `GET /api/lifecycle/top?limit=5` | TOP N 生命周期 |
 | `GET /api/partition-detail?category=游戏` | 分区下钻 |
-| `GET /api/word-cloud?source=title&category=游戏` | 词云（标题/评论/弹幕） |
+| `GET /api/word-cloud?source=title&category=游戏&bvid=BVxxx` | 词云（标题/评论/弹幕，支持 bvid 维度） |
 | `GET /api/hot-comments?category=游戏&limit=20` | 热门评论排行 |
 | `GET /api/interaction?bvid=BVxxx` | 互动质量 |
+| `GET /api/interaction-max` | 全局最大互动率（雷达图基准） |
 
 完整 JSON 示例和 TypeScript 类型见 `docs/plan.md` Section 5.3 / 6.3。
 
@@ -177,7 +180,9 @@ curl "http://localhost:9090/api/interaction?bvid=BVxxx"
 - [x] MySQL 建表 + 数据导出 — 8 张 ADS 表，Spark JDBC 导出脚本
 - [x] MapReduce 词云 — Hadoop Streaming + Python3/jieba，支持标题/评论/弹幕三种 source
 - [x] 数据管线全链路验证 — P10 问题已解决，8 张 ADS 表全部导出 MySQL 成功
-- [x] Rust 后端 10 个 API 实现 — Axum + sqlx 宏编译期校验，10 个 GET 端点已验证
+- [x] Rust 后端 11 个 API 实现 — Axum + sqlx 宏编译期校验，11 个 GET 端点已验证
+- [x] 弹幕限流检测 — 39 字节空响应检测 + 全局冷却机制
+- [x] ETL 去掉数据限制 — ads_hot_comments 和 ads_video_lifecycle 全量导入
 - [ ] React 前端大屏开发
 - [ ] 课程报告 + PPT
 
@@ -201,4 +206,8 @@ curl "http://localhost:9090/api/interaction?bvid=BVxxx"
 - 采集部署在 WSL，通过 user-level systemd 常驻 `crawler.service` 自动循环触发；日志用 `journalctl --user -u crawler.service -f` 查看
 - `crawler.service` 启动即采集，采集完成后自动运行 `run_pipeline.sh`，再休眠 6 小时进入下一轮；需要停止时手动 `systemctl --user stop crawler.service`
 - 热门视频 tags 全空（B站数据现象），标签词云由 `scripts/run_tag_cloud_mr.sh` 基于 `ads_hot_video_rank.title` 做 MapReduce 标题分词生成，结果写入 `ads_word_cloud`（source_type='title'）
+- 词云支持 bvid 维度：MR 输入格式 `bvid\tcategory\ttext`，输出 `bvid\tcategory\tword\t1`；聚合查询 `GROUP BY word`，视频查询按 `bvid` 过滤
+- 词云来源三种：title（标题）、comment（评论）、danmaku（弹幕），均由 MapReduce 生成
+- 弹幕限流检测：seg.so 返回 39 字节空响应时立即停止，`_record_429()` 计数；连续 3 次限流触发全局冷却 60s
+- ETL 无数据限制：ads_hot_comments 和 ads_video_lifecycle 全量导入（无 LIMIT）
 - 生命周期折线图 Day 1 仅有 1 个快照点（`view_growth=0`），至少需要 2 轮采集
