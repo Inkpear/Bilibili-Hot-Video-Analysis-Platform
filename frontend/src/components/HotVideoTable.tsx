@@ -15,30 +15,74 @@ const SORT_OPTIONS: { value: HotVideosSort; label: string }[] = [
   { value: 'coins', label: '投币' },
 ]
 
+const BATCH_SIZE = 50
 const MAX_VIDEO_MS = 20000
 
 export default function HotVideoTable() {
   const [sort, setSort] = useState<HotVideosSort>('heat')
+  const [allVideos, setAllVideos] = useState<HotVideoItem[]>([])
+  const [total, setTotal] = useState(0)
+  const [offset, setOffset] = useState(0)
+  const [loadingMore, setLoadingMore] = useState(false)
   const [hoveredVideo, setHoveredVideo] = useState<HotVideoItem | null>(null)
   const [mousePos, setMousePos] = useState<{ x: number; y: number }>({ x: 0, y: 0 })
 
-  const { data, loading } = useApi(() => fetchHotVideos(sort, 100, 0), [sort])
+  const { data, loading } = useApi(() => fetchHotVideos(sort, BATCH_SIZE, 0), [sort])
   const {
     selectedBvid, setSelectedBvid, selectedCategory, selectedWord,
     carousel, startCarousel, stopCarousel, advanceCarousel, carouselAdvanceRef,
   } = useDashboard()
 
   const scrollRef = useRef<HTMLDivElement>(null)
+  const sentinelRef = useRef<HTMLDivElement>(null)
   const videosRef = useRef<HotVideoItem[]>([])
   const videoStartRef = useRef<number>(0)
 
+  useEffect(() => {
+    if (data) {
+      setAllVideos(data.videos)
+      setTotal(data.total)
+      setOffset(BATCH_SIZE)
+    }
+  }, [data])
+
+  const hasMore = allVideos.length < total
+
+  const loadMore = useCallback(async () => {
+    if (loadingMore || !hasMore) return
+    setLoadingMore(true)
+    try {
+      const res = await fetchHotVideos(sort, BATCH_SIZE, offset)
+      setAllVideos((prev) => {
+        const existing = new Set(prev.map((v) => v.bvid))
+        const newItems = res.videos.filter((v) => !existing.has(v.bvid))
+        return [...prev, ...newItems]
+      })
+      setOffset((prev) => prev + BATCH_SIZE)
+    } finally {
+      setLoadingMore(false)
+    }
+  }, [sort, offset, loadingMore, hasMore])
+
+  useEffect(() => {
+    const sentinel = sentinelRef.current
+    if (!sentinel) return
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) loadMore()
+      },
+      { root: scrollRef.current, threshold: 0.1 }
+    )
+    observer.observe(sentinel)
+    return () => observer.disconnect()
+  }, [loadMore])
+
   const videos = useMemo(() => {
-    if (!data) return []
-    let list = data.videos
+    let list = allVideos
     if (selectedCategory) list = list.filter((v) => v.category === selectedCategory)
     if (selectedWord) list = list.filter((v) => v.title.includes(selectedWord))
     return list
-  }, [data, selectedCategory, selectedWord])
+  }, [allVideos, selectedCategory, selectedWord])
 
   useEffect(() => {
     videosRef.current = videos
@@ -49,10 +93,15 @@ export default function HotVideoTable() {
     if (vids.length === 0) return
     const currentBvid = selectedBvid
     const currentIdx = vids.findIndex((v) => v.bvid === currentBvid)
-    const next = (currentIdx + 1) % vids.length
-    setSelectedBvid(vids[next]?.bvid ?? null)
+    const nextIdx = (currentIdx + 1) % vids.length
+
+    if (nextIdx < currentIdx || nextIdx >= vids.length - 5) {
+      loadMore()
+    }
+
+    setSelectedBvid(vids[nextIdx]?.bvid ?? null)
     videoStartRef.current = Date.now()
-  }, [setSelectedBvid, selectedBvid])
+  }, [setSelectedBvid, selectedBvid, loadMore])
 
   useEffect(() => {
     carouselAdvanceRef.current = doAdvance
@@ -125,7 +174,7 @@ export default function HotVideoTable() {
         {SORT_OPTIONS.map((s) => (
           <button
             key={s.value}
-            onClick={() => setSort(s.value)}
+            onClick={() => { setSort(s.value); setAllVideos([]); setOffset(0); }}
             className={`px-2 py-0.5 text-xs rounded transition-colors ${
               sort === s.value
                 ? 'bg-bili-blue text-white'
@@ -141,7 +190,7 @@ export default function HotVideoTable() {
 
   return (
     <Card title="热门视频" extra={extra} className="h-full">
-      {loading ? (
+      {loading && allVideos.length === 0 ? (
         <Loading rows={8} />
       ) : (
         <div className="flex flex-col h-full min-h-0">
@@ -206,8 +255,13 @@ export default function HotVideoTable() {
               </tbody>
             </table>
 
-            <div className="h-4 flex items-center justify-center">
-              <span className="text-[10px] text-text-muted">共 {videos.length} 条</span>
+            <div ref={sentinelRef} className="h-8 flex items-center justify-center">
+              {loadingMore && (
+                <div className="w-4 h-4 border-2 border-bili-blue border-t-transparent rounded-full animate-spin" />
+              )}
+              {!hasMore && videos.length > 0 && (
+                <span className="text-[10px] text-text-muted">— 已加载全部 {videos.length} 条 —</span>
+              )}
             </div>
           </div>
         </div>
