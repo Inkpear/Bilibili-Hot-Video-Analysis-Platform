@@ -35,48 +35,30 @@ export default function HotVideoTable() {
 
   const scrollRef = useRef<HTMLDivElement>(null)
   const sentinelRef = useRef<HTMLDivElement>(null)
+  const loadingMoreRef = useRef(false)
+  const offsetRef = useRef(0)
+  const totalRef = useRef(0)
   const videosRef = useRef<HotVideoItem[]>([])
   const videoStartRef = useRef<number>(0)
+  const prevSelectedBvid = useRef<string | null>(null)
 
+  // sync refs
+  useEffect(() => { loadingMoreRef.current = loadingMore }, [loadingMore])
+  useEffect(() => { offsetRef.current = offset }, [offset])
+  useEffect(() => { totalRef.current = total }, [total])
+
+  // init on data change
   useEffect(() => {
     if (data) {
       setAllVideos(data.videos)
       setTotal(data.total)
       setOffset(BATCH_SIZE)
+      offsetRef.current = BATCH_SIZE
+      totalRef.current = data.total
     }
   }, [data])
 
-  const hasMore = allVideos.length < total
-
-  const loadMore = useCallback(async () => {
-    if (loadingMore || !hasMore) return
-    setLoadingMore(true)
-    try {
-      const res = await fetchHotVideos(sort, BATCH_SIZE, offset)
-      setAllVideos((prev) => {
-        const existing = new Set(prev.map((v) => v.bvid))
-        const newItems = res.videos.filter((v) => !existing.has(v.bvid))
-        return [...prev, ...newItems]
-      })
-      setOffset((prev) => prev + BATCH_SIZE)
-    } finally {
-      setLoadingMore(false)
-    }
-  }, [sort, offset, loadingMore, hasMore])
-
-  useEffect(() => {
-    const sentinel = sentinelRef.current
-    if (!sentinel) return
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries[0].isIntersecting) loadMore()
-      },
-      { root: scrollRef.current, threshold: 0.1 }
-    )
-    observer.observe(sentinel)
-    return () => observer.disconnect()
-  }, [loadMore])
-
+  // filtered videos
   const videos = useMemo(() => {
     let list = allVideos
     if (selectedCategory) list = list.filter((v) => v.category === selectedCategory)
@@ -84,29 +66,82 @@ export default function HotVideoTable() {
     return list
   }, [allVideos, selectedCategory, selectedWord])
 
-  useEffect(() => {
-    videosRef.current = videos
-  }, [videos])
+  useEffect(() => { videosRef.current = videos }, [videos])
 
+  // load more — stable callback, reads from refs
+  const loadMore = useCallback(async () => {
+    if (loadingMoreRef.current || offsetRef.current >= totalRef.current) return
+    loadingMoreRef.current = true
+    setLoadingMore(true)
+    try {
+      const curOffset = offsetRef.current
+      const res = await fetchHotVideos(sort, BATCH_SIZE, curOffset)
+      setAllVideos((prev) => {
+        const existing = new Set(prev.map((v) => v.bvid))
+        const newItems = res.videos.filter((v) => !existing.has(v.bvid))
+        return [...prev, ...newItems]
+      })
+      const nextOffset = curOffset + BATCH_SIZE
+      setOffset(nextOffset)
+      offsetRef.current = nextOffset
+    } finally {
+      loadingMoreRef.current = false
+      setLoadingMore(false)
+    }
+  }, [sort]) // only depends on sort
+
+  // intersection observer — stable, only reconnects on sort change
+  useEffect(() => {
+    const sentinel = sentinelRef.current
+    const scroll = scrollRef.current
+    if (!sentinel || !scroll) return
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) loadMore()
+      },
+      { root: scroll, rootMargin: '200px' }
+    )
+    observer.observe(sentinel)
+    return () => observer.disconnect()
+  }, [sort]) // only reconnects on sort change, not on loadMore
+
+  // scroll selected row into view — only when bvid actually changes
+  useEffect(() => {
+    if (!selectedBvid || selectedBvid === prevSelectedBvid.current) return
+    prevSelectedBvid.current = selectedBvid
+
+    const scroll = scrollRef.current
+    if (!scroll) return
+
+    const row = scroll.querySelector(`[data-bvid="${selectedBvid}"]`)
+    if (row) {
+      setTimeout(() => row.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 50)
+    }
+  }, [selectedBvid])
+
+  // carousel advance — stable callback
   const doAdvance = useCallback(() => {
     const vids = videosRef.current
     if (vids.length === 0) return
-    const currentBvid = selectedBvid
-    const currentIdx = vids.findIndex((v) => v.bvid === currentBvid)
-    const nextIdx = (currentIdx + 1) % vids.length
+    const curBvid = prevSelectedBvid.current
+    const curIdx = vids.findIndex((v) => v.bvid === curBvid)
+    const nextIdx = (curIdx + 1) % vids.length
 
-    if (nextIdx < currentIdx || nextIdx >= vids.length - 5) {
-      loadMore()
-    }
+    // trigger load more if approaching end
+    if (nextIdx >= vids.length - 5) loadMore()
 
-    setSelectedBvid(vids[nextIdx]?.bvid ?? null)
+    const nextBvid = vids[nextIdx]?.bvid ?? null
+    prevSelectedBvid.current = nextBvid
+    setSelectedBvid(nextBvid)
     videoStartRef.current = Date.now()
-  }, [setSelectedBvid, selectedBvid, loadMore])
+  }, [setSelectedBvid, loadMore])
 
   useEffect(() => {
     carouselAdvanceRef.current = doAdvance
   }, [doAdvance, carouselAdvanceRef])
 
+  // carousel timer
   useEffect(() => {
     if (!carousel.on) return
     const { commentShown, danmakuShown } = carousel.wordCloud
@@ -123,7 +158,10 @@ export default function HotVideoTable() {
   const handleToggleCarousel = useCallback(() => {
     if (carousel.on) { stopCarousel(); return }
     videoStartRef.current = Date.now()
-    if (videos.length > 0) setSelectedBvid(videos[0].bvid)
+    if (videos.length > 0) {
+      prevSelectedBvid.current = videos[0].bvid
+      setSelectedBvid(videos[0].bvid)
+    }
     startCarousel()
   }, [carousel.on, videos, setSelectedBvid, startCarousel, stopCarousel])
 
@@ -136,6 +174,7 @@ export default function HotVideoTable() {
 
   const sortLabel = SORT_OPTIONS.find((s) => s.value === sort)?.label ?? '热度'
   const wcDone = carousel.on && carousel.wordCloud.commentShown && carousel.wordCloud.danmakuShown
+  const hasMore = offset < total
 
   const getSortValue = (v: HotVideoItem) => {
     switch (sort) {
@@ -174,7 +213,7 @@ export default function HotVideoTable() {
         {SORT_OPTIONS.map((s) => (
           <button
             key={s.value}
-            onClick={() => { setSort(s.value); setAllVideos([]); setOffset(0); }}
+            onClick={() => { setSort(s.value); setAllVideos([]); setOffset(0); offsetRef.current = 0; }}
             className={`px-2 py-0.5 text-xs rounded transition-colors ${
               sort === s.value
                 ? 'bg-bili-blue text-white'
@@ -219,9 +258,7 @@ export default function HotVideoTable() {
                   return (
                     <tr
                       key={v.bvid}
-                      ref={isSelected ? (el) => {
-                        if (el) setTimeout(() => el.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 100)
-                      } : undefined}
+                      data-bvid={v.bvid}
                       onClick={() => {
                         if (carousel.on) return
                         setSelectedBvid(v.bvid === selectedBvid ? null : v.bvid)
