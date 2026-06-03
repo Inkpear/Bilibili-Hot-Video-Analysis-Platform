@@ -1,35 +1,32 @@
 """
-榜单采集：全站热门 + 9 分区排行。
+榜单采集：14 分区排行（ranking/v2 接口）。
 """
 
 import json
 import logging
 
-from config import (
-    CATEGORY_RIDS,
-    POPULAR_PS, POPULAR_PAGES,
-    map_tname, MAX_FAIL_COUNT,
-)
+from config import CATEGORY_RIDS, MAX_FAIL_COUNT
 from utils import api_get_safe, timestamp_now_ms
 
 logger = logging.getLogger("crawler")
 
-RANK_SOURCE_POPULAR = "popular"
 RANK_SOURCE_RANKING = "ranking"
 
 
-def collect_popular(snapshot_id: str, db) -> list[dict]:
-    """采集全站热门榜 (2页×50条)。"""
+def collect_rankings(snapshot_id: str, db) -> list[dict]:
+    """采集 14 个分区排行（ranking/v2 + WBI 签名）。"""
     rows = []
     collect_time = timestamp_now_ms()
 
-    for pn in range(1, POPULAR_PAGES + 1):
+    for cat_name, rid in CATEGORY_RIDS.items():
         data = api_get_safe(
-            "/x/web-interface/popular",
-            {"pn": pn, "ps": POPULAR_PS},
-            need_cookie=False,
+            "/x/web-interface/ranking/v2",
+            {"rid": rid, "type": "all"},
+            need_cookie=True,
+            wbi_sign=True,
         )
         if data is None:
+            logger.warning(f"  分区 {cat_name}(rid={rid}) 采集失败，跳过")
             continue
 
         items = data.get("data", {}).get("list", [])
@@ -41,15 +38,12 @@ def collect_popular(snapshot_id: str, db) -> list[dict]:
             stat = item.get("stat", {})
             owner = item.get("owner", {})
             tname = item.get("tname", "")
-            category = map_tname(tname)
-
-            rank_position = (pn - 1) * POPULAR_PS + idx + 1
 
             row = {
                 "bvid": bvid,
                 "title": item.get("title", ""),
                 "description": "",
-                "category": category,
+                "category": cat_name,
                 "sub_category": tname,
                 "tags": "",
                 "duration": item.get("duration", 0),
@@ -60,8 +54,8 @@ def collect_popular(snapshot_id: str, db) -> list[dict]:
                 "url": f"https://www.bilibili.com/video/{bvid}",
                 "aid": item.get("aid", 0),
                 "cid": item.get("cid", 0),
-                "rank_source": RANK_SOURCE_POPULAR,
-                "rank_name": "全站热门",
+                "rank_source": RANK_SOURCE_RANKING,
+                "rank_name": f"{cat_name}榜",
                 "view_count": stat.get("view", 0),
                 "like_count": stat.get("like", 0),
                 "coin_count": stat.get("coin", 0),
@@ -69,88 +63,21 @@ def collect_popular(snapshot_id: str, db) -> list[dict]:
                 "share_count": stat.get("share", 0),
                 "reply_count": stat.get("reply", 0),
                 "danmaku_count": stat.get("danmaku", 0),
-                "rank_position": rank_position,
+                "rank_position": idx + 1,
                 "snapshot_id": snapshot_id,
                 "collect_time": collect_time,
             }
             rows.append(row)
 
-    logger.info(f"  全站热门: {len(rows)} 条")
-    return rows
+        logger.info(f"  分区 {cat_name}: {len(items)} 条")
 
-
-def collect_rankings(snapshot_id: str, db) -> list[dict]:
-    """采集 9 个分区热门（每分区 2 页×50 条 = 100 条）。"""
-    rows = []
-    collect_time = timestamp_now_ms()
-
-    for cat_name, rid in CATEGORY_RIDS.items():
-        cat_count = 0
-        for pn in range(1, POPULAR_PAGES + 1):
-            data = api_get_safe(
-                "/x/web-interface/popular",
-                {"rid": rid, "ps": POPULAR_PS, "pn": pn},
-                need_cookie=False,
-            )
-            if data is None:
-                logger.warning(f"  分区 {cat_name}(rid={rid}) 第{pn}页采集失败，跳过")
-                continue
-
-            items = data.get("data", {}).get("list", [])
-            for idx, item in enumerate(items):
-                bvid = item.get("bvid", "")
-                if not bvid:
-                    continue
-
-                stat = item.get("stat", {})
-                owner = item.get("owner", {})
-                tname = item.get("tname", "")
-                category = map_tname(tname)
-
-                rank_position = (pn - 1) * POPULAR_PS + idx + 1
-
-                row = {
-                    "bvid": bvid,
-                    "title": item.get("title", ""),
-                    "description": "",
-                    "category": category if category != "其他" else cat_name,
-                    "sub_category": tname,
-                    "tags": "",
-                    "duration": item.get("duration", 0),
-                    "publish_time": item.get("pubdate", 0),
-                    "up_id": str(owner.get("mid", "")),
-                    "up_name": owner.get("name", ""),
-                    "up_avatar": owner.get("face", ""),
-                    "url": f"https://www.bilibili.com/video/{bvid}",
-                    "aid": item.get("aid", 0),
-                    "cid": item.get("cid", 0),
-                    "rank_source": RANK_SOURCE_RANKING,
-                    "rank_name": f"{cat_name}热门",
-                    "view_count": stat.get("view", 0),
-                    "like_count": stat.get("like", 0),
-                    "coin_count": stat.get("coin", 0),
-                    "favorite_count": stat.get("favorite", 0),
-                    "share_count": stat.get("share", 0),
-                    "reply_count": stat.get("reply", 0),
-                    "danmaku_count": stat.get("danmaku", 0),
-                    "rank_position": rank_position,
-                    "snapshot_id": snapshot_id,
-                    "collect_time": collect_time,
-                }
-                rows.append(row)
-                cat_count += 1
-
-        logger.info(f"  分区 {cat_name}: {cat_count} 条")
-
-    logger.info(f"  分区热门合计: {len(rows)} 条")
+    logger.info(f"  分区排行合计: {len(rows)} 条")
     return rows
 
 
 def collect_all_ranks(snapshot_id: str, db) -> list[dict]:
     """采集所有榜单，返回 rank_video 行列表。"""
-    all_rows = []
-    all_rows.extend(collect_popular(snapshot_id, db))
-    all_rows.extend(collect_rankings(snapshot_id, db))
+    all_rows = collect_rankings(snapshot_id, db)
     logger.info(f"  榜单总计: {len(all_rows)} 条")
     return all_rows
 

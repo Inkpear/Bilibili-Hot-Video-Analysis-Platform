@@ -10,7 +10,7 @@ USE bilibili;
 -- Stage 4: DWD 清洗层
 -- ============================================================================
 
--- 4.1 视频快照表（按 snapshot_date 分区，去重，只保留近30天视频）
+-- 4.1 视频快照表（按 snapshot_date 分区，去重）
 DROP TABLE IF EXISTS dwd_video_snapshot;
 CREATE TABLE dwd_video_snapshot (
     bvid            STRING,
@@ -59,11 +59,10 @@ FROM (
       AND title IS NOT NULL
       AND view_count IS NOT NULL
       AND view_count >= 0
-      AND publish_time >= UNIX_TIMESTAMP(DATE_SUB(CURRENT_DATE(), 30))
 ) t
 WHERE t.rn = 1;
 
--- 4.2 视频基础信息表（按 bvid 唯一，canonical 优先级，只保留近30天）
+-- 4.2 视频基础信息表（按 bvid 唯一）
 DROP TABLE IF EXISTS dwd_video_info;
 CREATE TABLE dwd_video_info (
     bvid            STRING,
@@ -103,22 +102,16 @@ FROM (
     SELECT *,
         ROW_NUMBER() OVER (
             PARTITION BY bvid
-            ORDER BY CASE rank_source
-                WHEN 'popular' THEN 1
-                WHEN 'ranking' THEN 2
-                ELSE 9
-            END,
-            CASE WHEN category != '其他' AND category IS NOT NULL THEN 0 ELSE 1 END,
-            CASE WHEN COALESCE(description, '') != '' THEN 0 ELSE 1 END
+            ORDER BY CASE WHEN category != '其他' AND category IS NOT NULL THEN 0 ELSE 1 END,
+                     CASE WHEN COALESCE(description, '') != '' THEN 0 ELSE 1 END
         ) AS rn
     FROM ods_rank_video_raw
     WHERE bvid IS NOT NULL
       AND title IS NOT NULL
-      AND publish_time >= UNIX_TIMESTAMP(DATE_SUB(CURRENT_DATE(), 30))
 ) t
 WHERE t.rn = 1;
 
--- 4.3 评论明细表（只保留近30天视频的评论）
+-- 4.3 评论明细表
 DROP TABLE IF EXISTS dwd_comment_info;
 CREATE TABLE dwd_comment_info (
     comment_id      BIGINT,
@@ -160,14 +153,13 @@ FROM (
             ORDER BY CAST(c.comment_time AS BIGINT) DESC
         ) AS rn
     FROM ods_video_comment_raw c
-    INNER JOIN dwd_video_info v ON c.bvid = v.bvid
     WHERE c.content IS NOT NULL
       AND c.content != ''
       AND c.bvid IS NOT NULL
 ) t
 WHERE t.rn = 1;
 
--- 4.4 弹幕明细表（只保留近30天视频的弹幕）
+-- 4.4 弹幕明细表
 DROP TABLE IF EXISTS dwd_danmaku_info;
 CREATE TABLE dwd_danmaku_info (
     danmaku_id      BIGINT,
@@ -212,7 +204,6 @@ FROM (
             ORDER BY CAST(d.send_time AS BIGINT) DESC
         ) AS rn
     FROM ods_video_danmaku_raw d
-    INNER JOIN dwd_video_info v ON d.bvid = v.bvid
     WHERE d.content IS NOT NULL
       AND d.content != ''
       AND d.bvid IS NOT NULL
@@ -257,11 +248,7 @@ WITH canonical AS (
         SELECT *,
             ROW_NUMBER() OVER (
                 PARTITION BY bvid, snapshot_id
-                ORDER BY CASE rank_source
-                    WHEN 'popular' THEN 1
-                    WHEN 'ranking' THEN 2
-                    ELSE 9
-                END
+                ORDER BY rank_position
             ) AS rn
         FROM dwd_video_snapshot
     ) t
@@ -288,7 +275,7 @@ FROM latest_per_day s
 JOIN dwd_video_info v ON s.bvid = v.bvid
 GROUP BY v.category, s.snapshot_date;
 
--- 5.2 视频生命周期 (DWS) — popular 榜单
+-- 5.2 视频生命周期 (DWS)
 DROP TABLE IF EXISTS dws_video_lifecycle_stats;
 CREATE TABLE dws_video_lifecycle_stats AS
 WITH latest_collect AS (
@@ -298,7 +285,6 @@ top_videos AS (
     SELECT s.bvid
     FROM dwd_video_snapshot s
     JOIN latest_collect lc ON s.snapshot_id = lc.max_sid
-    WHERE s.rank_source = 'popular'
     ORDER BY s.view_count DESC
     LIMIT 100
 )
@@ -316,15 +302,14 @@ SELECT
     s.like_count,
     s.rank_position,
     s.view_count - LAG(s.view_count) OVER (
-        PARTITION BY s.bvid, s.rank_source ORDER BY s.snapshot_id
+        PARTITION BY s.bvid ORDER BY s.snapshot_id
     ) AS view_growth,
     LAG(s.rank_position) OVER (
-        PARTITION BY s.bvid, s.rank_source ORDER BY s.snapshot_id
+        PARTITION BY s.bvid ORDER BY s.snapshot_id
     ) - s.rank_position AS rank_change
 FROM dwd_video_snapshot s
 JOIN dwd_video_info v ON s.bvid = v.bvid
-WHERE s.bvid IN (SELECT bvid FROM top_videos)
-  AND s.rank_source = 'popular';
+WHERE s.bvid IN (SELECT bvid FROM top_videos);
 
 -- 5.3 UP 主汇总 (DWS)
 DROP TABLE IF EXISTS dws_up_summary_stats;
@@ -335,11 +320,7 @@ WITH canonical AS (
         SELECT *,
             ROW_NUMBER() OVER (
                 PARTITION BY bvid, snapshot_id
-                ORDER BY CASE rank_source
-                    WHEN 'popular' THEN 1
-                    WHEN 'ranking' THEN 2
-                    ELSE 9
-                END
+                ORDER BY rank_position
             ) AS rn
         FROM dwd_video_snapshot
         WHERE snapshot_id = (SELECT MAX(snapshot_id) FROM dwd_video_snapshot)
@@ -372,11 +353,7 @@ WITH canonical AS (
         SELECT *,
             ROW_NUMBER() OVER (
                 PARTITION BY bvid, snapshot_id
-                ORDER BY CASE rank_source
-                    WHEN 'popular' THEN 1
-                    WHEN 'ranking' THEN 2
-                    ELSE 9
-                END
+                ORDER BY rank_position
             ) AS rn
         FROM dwd_video_snapshot
         WHERE snapshot_id = (SELECT MAX(snapshot_id) FROM dwd_video_snapshot)
@@ -403,11 +380,7 @@ WITH latest AS (
         SELECT *,
             ROW_NUMBER() OVER (
                 PARTITION BY bvid, snapshot_id
-                ORDER BY CASE rank_source
-                    WHEN 'popular' THEN 1
-                    WHEN 'ranking' THEN 2
-                    ELSE 9
-                END
+                ORDER BY rank_position
             ) AS rn
         FROM dwd_video_snapshot
         WHERE snapshot_id = (SELECT MAX(snapshot_id) FROM dwd_video_snapshot)
@@ -464,11 +437,7 @@ WITH canonical AS (
         SELECT *,
             ROW_NUMBER() OVER (
                 PARTITION BY bvid, snapshot_id
-                ORDER BY CASE rank_source
-                    WHEN 'popular' THEN 1
-                    WHEN 'ranking' THEN 2
-                    ELSE 9
-                END
+                ORDER BY rank_position
             ) AS rn
         FROM dwd_video_snapshot
         WHERE snapshot_id = (SELECT MAX(snapshot_id) FROM dwd_video_snapshot)
@@ -535,7 +504,7 @@ INSERT OVERWRITE TABLE ads_word_cloud
 -- 标题词云数据（由 MapReduce 生成，此处仅建空表框架）
 SELECT source_type, category, word, word_count
 FROM (
-    SELECT 'title' AS source_type, '全站' AS category, '__placeholder__' AS word, 0 AS word_count
+    SELECT 'title' AS source_type, '__ALL__' AS category, '__placeholder__' AS word, 0 AS word_count
 ) t
 WHERE 1 = 0;
 
