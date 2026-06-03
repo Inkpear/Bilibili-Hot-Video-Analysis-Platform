@@ -453,8 +453,7 @@ SELECT
 FROM latest s
 JOIN dwd_video_info v ON s.bvid = v.bvid
 CROSS JOIN norm n
-ORDER BY heat_score DESC
-LIMIT 100;
+ORDER BY heat_score DESC;
 
 -- 5.6 分区竞争力
 DROP TABLE IF EXISTS ads_partition_compare;

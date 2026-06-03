@@ -80,15 +80,15 @@ def collect_popular(snapshot_id: str, db) -> list[dict]:
 
 
 def collect_rankings(snapshot_id: str, db) -> list[dict]:
-    """采集 9 个分区排行。"""
+    """采集 9 个分区热门（使用 popular 接口，返回近期热门视频）。"""
     rows = []
     collect_time = timestamp_now_ms()
 
     for cat_name, rid in CATEGORY_RIDS.items():
         data = api_get_safe(
-            "/x/web-interface/ranking/v2",
-            {"rid": rid, "type": "all"},
-            need_cookie=True,
+            "/x/web-interface/popular",
+            {"rid": rid, "ps": 50, "pn": 1},
+            need_cookie=False,
         )
         if data is None:
             logger.warning(f"  分区 {cat_name}(rid={rid}) 采集失败，跳过")
@@ -103,12 +103,13 @@ def collect_rankings(snapshot_id: str, db) -> list[dict]:
             stat = item.get("stat", {})
             owner = item.get("owner", {})
             tname = item.get("tname", "")
+            category = map_tname(tname)
 
             row = {
                 "bvid": bvid,
                 "title": item.get("title", ""),
                 "description": "",
-                "category": cat_name,
+                "category": category if category != "其他" else cat_name,
                 "sub_category": tname,
                 "tags": "",
                 "duration": item.get("duration", 0),
@@ -120,7 +121,7 @@ def collect_rankings(snapshot_id: str, db) -> list[dict]:
                 "aid": item.get("aid", 0),
                 "cid": item.get("cid", 0),
                 "rank_source": RANK_SOURCE_RANKING,
-                "rank_name": f"{cat_name}榜",
+                "rank_name": f"{cat_name}热门",
                 "view_count": stat.get("view", 0),
                 "like_count": stat.get("like", 0),
                 "coin_count": stat.get("coin", 0),
@@ -136,7 +137,7 @@ def collect_rankings(snapshot_id: str, db) -> list[dict]:
 
         logger.info(f"  分区 {cat_name}: {len(items)} 条")
 
-    logger.info(f"  分区排行合计: {len(rows)} 条")
+    logger.info(f"  分区热门合计: {len(rows)} 条")
     return rows
 
 

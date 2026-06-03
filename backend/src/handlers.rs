@@ -41,8 +41,8 @@ pub async fn hot_videos(
     let limit = query.limit.unwrap_or(20);
     let offset = query.offset.unwrap_or(0);
 
-    if !(0..=100).contains(&limit) {
-        return Err(AppError::bad_request("limit must be between 0 and 100"));
+    if !(0..=500).contains(&limit) {
+        return Err(AppError::bad_request("limit must be between 0 and 500"));
     }
     if offset < 0 {
         return Err(AppError::bad_request("offset must be >= 0"));
@@ -217,8 +217,8 @@ pub async fn lifecycle_top(
     Query(query): Query<LifecycleTopQuery>,
 ) -> Result<Json<ApiResponse<LifecycleTopData>>, AppError> {
     let limit = query.limit.unwrap_or(5);
-    if !(0..=100).contains(&limit) {
-        return Err(AppError::bad_request("limit must be between 0 and 100"));
+    if !(0..=500).contains(&limit) {
+        return Err(AppError::bad_request("limit must be between 0 and 500"));
     }
 
     if limit == 0 {
@@ -403,8 +403,8 @@ pub async fn hot_comments(
     Query(query): Query<HotCommentsQuery>,
 ) -> Result<Json<ApiResponse<HotCommentsData>>, AppError> {
     let limit = query.limit.unwrap_or(20);
-    if !(0..=100).contains(&limit) {
-        return Err(AppError::bad_request("limit must be between 0 and 100"));
+    if !(0..=500).contains(&limit) {
+        return Err(AppError::bad_request("limit must be between 0 and 500"));
     }
 
     if limit == 0 {
