@@ -236,6 +236,7 @@ export default function HotVideoTable() {
           <button
             key={s.value}
             onClick={() => {
+              if (sort === s.value) return
               setSort(s.value)
               setAllVideos([])
               offsetRef.current = 0
