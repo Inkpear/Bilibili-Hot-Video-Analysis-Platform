@@ -40,6 +40,7 @@ pub async fn hot_videos(
     let sort = query.sort.as_deref().unwrap_or("heat");
     let limit = query.limit.unwrap_or(20);
     let offset = query.offset.unwrap_or(0);
+    let category = query.category.as_deref();
 
     if !(0..=500).contains(&limit) {
         return Err(AppError::bad_request("limit must be between 0 and 500"));
@@ -48,9 +49,16 @@ pub async fn hot_videos(
         return Err(AppError::bad_request("offset must be >= 0"));
     }
 
-    let total: (i64,) = sqlx::query_as("SELECT COUNT(*) AS cnt FROM ads_hot_video_rank")
-        .fetch_one(&pool)
-        .await?;
+    let total: (i64,) = if let Some(cat) = category {
+        sqlx::query_as("SELECT COUNT(*) AS cnt FROM ads_hot_video_rank WHERE category = ?")
+            .bind(cat)
+            .fetch_one(&pool)
+            .await?
+    } else {
+        sqlx::query_as("SELECT COUNT(*) AS cnt FROM ads_hot_video_rank")
+            .fetch_one(&pool)
+            .await?
+    };
 
     if limit == 0 {
         return Ok(Json(ApiResponse::ok(HotVideosData {
@@ -59,70 +67,76 @@ pub async fn hot_videos(
         })));
     }
 
+    let where_clause = if category.is_some() { "WHERE category = ?" } else { "" };
+
     let rows = match sort {
         "heat" => {
-            sqlx::query_as!(
-                HotVideoRow,
+            let sql = format!(
                 r#"SELECT
                     bvid, title, category, up_name,
                     view_count, like_count, coin_count, favorite_count,
                     reply_count, share_count, rank_position, heat_score
                 FROM ads_hot_video_rank
+                {}
                 ORDER BY heat_score DESC
                 LIMIT ? OFFSET ?"#,
-                limit,
-                offset
-            )
-            .fetch_all(&pool)
-            .await?
+                where_clause
+            );
+            let mut q = sqlx::query_as::<_, HotVideoRow>(&sql);
+            if let Some(cat) = category { q = q.bind(cat); }
+            q = q.bind(limit).bind(offset);
+            q.fetch_all(&pool).await?
         }
         "views" => {
-            sqlx::query_as!(
-                HotVideoRow,
+            let sql = format!(
                 r#"SELECT
                     bvid, title, category, up_name,
                     view_count, like_count, coin_count, favorite_count,
                     reply_count, share_count, rank_position, heat_score
                 FROM ads_hot_video_rank
+                {}
                 ORDER BY view_count DESC
                 LIMIT ? OFFSET ?"#,
-                limit,
-                offset
-            )
-            .fetch_all(&pool)
-            .await?
+                where_clause
+            );
+            let mut q = sqlx::query_as::<_, HotVideoRow>(&sql);
+            if let Some(cat) = category { q = q.bind(cat); }
+            q = q.bind(limit).bind(offset);
+            q.fetch_all(&pool).await?
         }
         "likes" => {
-            sqlx::query_as!(
-                HotVideoRow,
+            let sql = format!(
                 r#"SELECT
                     bvid, title, category, up_name,
                     view_count, like_count, coin_count, favorite_count,
                     reply_count, share_count, rank_position, heat_score
                 FROM ads_hot_video_rank
+                {}
                 ORDER BY like_count DESC
                 LIMIT ? OFFSET ?"#,
-                limit,
-                offset
-            )
-            .fetch_all(&pool)
-            .await?
+                where_clause
+            );
+            let mut q = sqlx::query_as::<_, HotVideoRow>(&sql);
+            if let Some(cat) = category { q = q.bind(cat); }
+            q = q.bind(limit).bind(offset);
+            q.fetch_all(&pool).await?
         }
         "coins" => {
-            sqlx::query_as!(
-                HotVideoRow,
+            let sql = format!(
                 r#"SELECT
                     bvid, title, category, up_name,
                     view_count, like_count, coin_count, favorite_count,
                     reply_count, share_count, rank_position, heat_score
                 FROM ads_hot_video_rank
+                {}
                 ORDER BY coin_count DESC
                 LIMIT ? OFFSET ?"#,
-                limit,
-                offset
-            )
-            .fetch_all(&pool)
-            .await?
+                where_clause
+            );
+            let mut q = sqlx::query_as::<_, HotVideoRow>(&sql);
+            if let Some(cat) = category { q = q.bind(cat); }
+            q = q.bind(limit).bind(offset);
+            q.fetch_all(&pool).await?
         }
         _ => {
             return Err(AppError::bad_request(

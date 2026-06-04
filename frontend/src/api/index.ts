@@ -69,8 +69,10 @@ export function fetchOverview() {
   return get<OverviewData>('/api/overview');
 }
 
-export function fetchHotVideos(sort: HotVideosSort = 'heat', limit = 20, offset = 0) {
-  return get<HotVideosData>('/api/hot-videos', { sort, limit, offset });
+export function fetchHotVideos(sort: HotVideosSort = 'heat', limit = 20, offset = 0, category?: string) {
+  const params: Record<string, string | number> = { sort, limit, offset };
+  if (category) params.category = category;
+  return get<HotVideosData>('/api/hot-videos', params);
 }
 
 export function fetchPartitionCompare() {

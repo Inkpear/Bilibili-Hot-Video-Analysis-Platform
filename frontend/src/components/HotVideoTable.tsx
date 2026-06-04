@@ -26,7 +26,7 @@ export default function HotVideoTable() {
   const [hoveredVideo, setHoveredVideo] = useState<HotVideoItem | null>(null)
   const [mousePos, setMousePos] = useState<{ x: number; y: number }>({ x: 0, y: 0 })
 
-  const { data, loading } = useApi(() => fetchHotVideos(sort, BATCH_SIZE, 0), [sort])
+  const { data, loading } = useApi(() => fetchHotVideos(sort, BATCH_SIZE, 0, selectedCategory), [sort, selectedCategory])
   const {
     selectedBvid, setSelectedBvid, selectedCategory, selectedWord,
     carousel, startCarousel, stopCarousel, advanceCarousel, carouselAdvanceRef,
@@ -44,10 +44,9 @@ export default function HotVideoTable() {
   // ---- filtered videos ----
   const videos = useMemo(() => {
     let list = allVideos
-    if (selectedCategory) list = list.filter((v) => v.category === selectedCategory)
     if (selectedWord) list = list.filter((v) => v.title.includes(selectedWord))
     return list
-  }, [allVideos, selectedCategory, selectedWord])
+  }, [allVideos, selectedWord])
 
   useEffect(() => { videosRef.current = videos }, [videos])
 
@@ -67,7 +66,7 @@ export default function HotVideoTable() {
     setLoadingMore(true)
     try {
       const curOffset = offsetRef.current
-      const res = await fetchHotVideos(sort, BATCH_SIZE, curOffset)
+      const res = await fetchHotVideos(sort, BATCH_SIZE, curOffset, selectedCategory)
       setAllVideos((prev) => {
         const existing = new Set(prev.map((v) => v.bvid))
         const newItems = res.videos.filter((v) => !existing.has(v.bvid))
@@ -79,7 +78,7 @@ export default function HotVideoTable() {
       isLoadingRef.current = false
       setLoadingMore(false)
     }
-  }, [sort])
+  }, [sort, selectedCategory])
 
   // ---- 2. manual scroll detection ----
   const handleScroll = useCallback(() => {

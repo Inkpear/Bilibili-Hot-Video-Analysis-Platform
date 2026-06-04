@@ -18,6 +18,7 @@ MASTER_HOST="192.168.100.10"
 HADOOP_USER="hadoop"
 HADOOP_PASS="hadoop123"
 SSH_CMD="sshpass -p ${HADOOP_PASS} ssh -o StrictHostKeyChecking=no ${HADOOP_USER}@${MASTER_HOST}"
+HCATALOG_JAR="/opt/hive/lib/hive-hcatalog-core-3.1.3.jar"
 
 echo "================================================"
 echo "  数据管线 ETL — $(date '+%Y-%m-%d %H:%M:%S')"
@@ -69,7 +70,7 @@ bash "$SCRIPT_DIR/upload_hdfs.sh" "$@"
 # Step 2: 运行 Spark ETL
 echo ""
 echo "[2/4] 运行 Spark ETL..."
-$SSH_CMD "spark-sql --master spark://master:7077 -f /home/hadoop/sql/spark_etl.sql" 2>&1 | tail -20
+$SSH_CMD "spark-sql --master spark://master:7077 --jars ${HCATALOG_JAR} -f /home/hadoop/sql/spark_etl.sql" 2>&1 | tail -20
 
 # Step 3: 词云 MapReduce（标题/评论/弹幕）
 echo ""
@@ -80,8 +81,8 @@ $SSH_CMD "SOURCE_TYPE=danmaku bash /home/hadoop/scripts/run_tag_cloud_mr.sh" 2>&
 
 echo ""
 echo "[3.5/4] 合并词云到 ads_word_cloud..."
-$SSH_CMD "python3 -c \"
-sql = '''USE bilibili;
+$SSH_CMD "export HIVE_AUX_JARS_PATH=${HCATALOG_JAR} && hive -e \"
+USE bilibili;
 
 INSERT OVERWRITE TABLE ads_word_cloud
 SELECT source_type, bvid, category, word, word_count
@@ -106,10 +107,7 @@ FROM (
 ) ranked
 WHERE (category = '__ALL__' AND rn <= 150)
    OR (category != '__ALL__' AND rn <= 100);
-'''
-with open('/tmp/merge_word_cloud.sql', 'w') as f:
-    f.write(sql)
-\" && spark-sql --master spark://master:7077 -f /tmp/merge_word_cloud.sql" 2>&1 | tail -5
+\"" 2>&1 | tail -5
 
 # Step 4: 导出到 MySQL
 echo ""

@@ -123,7 +123,7 @@ CREATE TABLE ads_word_cloud (
     source_type VARCHAR(32),
     bvid        VARCHAR(32),
     category    VARCHAR(64),
-    word        VARCHAR(64),
+    word        VARCHAR(256),
     word_count  INT,
     update_time DATETIME DEFAULT CURRENT_TIMESTAMP,
     INDEX idx_source_category (source_type, category),
