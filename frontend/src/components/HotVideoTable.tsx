@@ -31,7 +31,7 @@ export default function HotVideoTable() {
     carousel, startCarousel, stopCarousel, advanceCarousel, carouselAdvanceRef,
   } = useDashboard()
 
-  const { data, loading } = useApi(() => fetchHotVideos(sort, BATCH_SIZE, 0, selectedCategory), [sort, selectedCategory])
+  const { data, loading } = useApi(() => fetchHotVideos(sort, BATCH_SIZE, 0, selectedCategory ?? undefined), [sort, selectedCategory])
 
   const containerRef = useRef<HTMLDivElement>(null)
   const rowRefs = useRef<Map<string, HTMLTableRowElement>>(new Map())
@@ -67,7 +67,7 @@ export default function HotVideoTable() {
     setLoadingMore(true)
     try {
       const curOffset = offsetRef.current
-      const res = await fetchHotVideos(sort, BATCH_SIZE, curOffset, selectedCategory)
+      const res = await fetchHotVideos(sort, BATCH_SIZE, curOffset, selectedCategory ?? undefined)
       setAllVideos((prev) => {
         const existing = new Set(prev.map((v) => v.bvid))
         const newItems = res.videos.filter((v) => !existing.has(v.bvid))
