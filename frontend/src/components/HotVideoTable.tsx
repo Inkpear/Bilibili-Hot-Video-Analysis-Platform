@@ -191,18 +191,21 @@ export default function HotVideoTable() {
     }
   }, [])
 
-  const sortLabel = SORT_OPTIONS.find((s) => s.value === sort)?.label ?? '热度'
+  const METRICS = {
+    heat: { label: '热度', getValue: (v: HotVideoItem) => v.heat_score.toFixed(3) },
+    views: { label: '播放', getValue: (v: HotVideoItem) => formatNumber(v.view_count) },
+    likes: { label: '点赞', getValue: (v: HotVideoItem) => formatNumber(v.like_count) },
+    coins: { label: '投币', getValue: (v: HotVideoItem) => formatNumber(v.coin_count) },
+  }
+
+  const secondaryCols: (keyof typeof METRICS)[] = sort === 'views'
+    ? ['heat', 'likes']
+    : sort === 'likes'
+      ? ['views', 'heat']
+      : ['views', 'likes']
+
   const wcDone = carousel.on && carousel.wordCloud.commentShown && carousel.wordCloud.danmakuShown
   const hasMore = hasMoreRef.current
-
-  const getSortValue = (v: HotVideoItem) => {
-    switch (sort) {
-      case 'views': return v.view_count
-      case 'likes': return v.like_count
-      case 'coins': return v.coin_count
-      default: return v.heat_score
-    }
-  }
 
   const extra = (
     <div className="flex items-center gap-2">
@@ -275,9 +278,9 @@ export default function HotVideoTable() {
                   <th className="py-1.5 text-left">标题</th>
                   <th className="py-1.5 text-left">UP主</th>
                   <th className="py-1.5 text-left">分区</th>
-                  <th className="py-1.5 text-right">播放</th>
-                  <th className="py-1.5 text-right">点赞</th>
-                  <th className="py-1.5 text-right">{sortLabel}</th>
+                  <th className="py-1.5 text-right">{METRICS[secondaryCols[0]].label}</th>
+                  <th className="py-1.5 text-right">{METRICS[secondaryCols[1]].label}</th>
+                  <th className="py-1.5 text-right text-bili-pink">{METRICS[sort].label}</th>
                 </tr>
               </thead>
               <tbody>
@@ -309,10 +312,14 @@ export default function HotVideoTable() {
                       <td className="py-1.5 text-text-muted">
                         <span className="px-1.5 py-0.5 rounded bg-bg-elevated text-[10px]">{v.category}</span>
                       </td>
-                      <td className="py-1.5 text-right font-mono-num text-text-secondary">{formatNumber(v.view_count)}</td>
-                      <td className="py-1.5 text-right font-mono-num text-text-secondary">{formatNumber(v.like_count)}</td>
+                      <td className="py-1.5 text-right font-mono-num text-text-secondary">
+                        {METRICS[secondaryCols[0]].getValue(v)}
+                      </td>
+                      <td className="py-1.5 text-right font-mono-num text-text-secondary">
+                        {METRICS[secondaryCols[1]].getValue(v)}
+                      </td>
                       <td className="py-1.5 text-right font-mono-num text-bili-pink font-semibold">
-                        {sort === 'heat' ? v.heat_score.toFixed(3) : formatNumber(getSortValue(v))}
+                        {METRICS[sort].getValue(v)}
                       </td>
                     </tr>
                   )
