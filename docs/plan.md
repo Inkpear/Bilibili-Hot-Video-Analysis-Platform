@@ -342,6 +342,7 @@ crawler/
 ```
 output/20260601_0000/
 ├── rank_video.ndjson      # 每行一条：{bvid, title, category, ..., snapshot_id, collect_time, rank_source, rank_name, rank_position}
+├── video_detail.ndjson    # 每行一条：{bvid, description, tags, aid, cid}（补充详情，采集过程中生成）
 ├── up_info.ndjson         # 每行一条：{up_id, up_name, follower_count, ...}
 ├── comments/
 │   ├── BV1xxx.ndjson      # 每行一条评论，含 bvid 字段
@@ -2205,7 +2206,7 @@ frontend/src/
 ### 6.5 技术栈
 
 ```
-React 18 + TypeScript
+React 19 + TypeScript
 echarts + echarts-for-react
 axios (API 请求)
 CSS Modules / Tailwind

@@ -1028,7 +1028,7 @@ GET /api/partition-detail          → 400, "category is required"
 4. `ads_word_cloud.word` VARCHAR(64) → VARCHAR(256)（jieba 分词可能超长）
 5. 更新 `run_pipeline.sh` 和 `mysql_ads_ddl.sql` 并同步到集群
 
-**验证**：8 张 ADS 表全部导出 MySQL 成功
+**验证**：9 张 ADS 表全部导出 MySQL 成功
 
 ### hot-videos API 支持 category 过滤
 

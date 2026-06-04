@@ -21,7 +21,7 @@ Bilibili-Hot-Video-Analysis-Platform/
 ├── crawler/                 # 采集脚本（已完成）
 ├── sql/                     # Hive/Spark/MySQL DDL 和 ETL SQL（已完成）
 ├── backend/src/             # Rust Axum 只读 API（已完成）
-├── frontend/src/            # React + ECharts 大屏（开发中）
+├── frontend/src/            # React + ECharts 大屏（已完成）
 ├── scripts/
 │   ├── deploy_crawler.sh    # 一键部署 crawler 到 WSL
 │   ├── extract_cookie.py    # 从浏览器提取 Cookie
@@ -48,7 +48,7 @@ Bilibili-Hot-Video-Analysis-Platform/
 | 分区 | 动画、游戏、娱乐、音乐、舞蹈、科技、知识、影视、鬼畜、美食、汽车、时尚美妆、体育运动、动物（14 个） |
 | 输出格式 | NDJSON（每行一个 JSON 对象），含 aid/cid/collect_time/category/snapshot_id |
 | 存储 | ODS/DWD/DWS → Hive；ADS → MySQL（Spark JDBC 导出） |
-| 前端 | React 18 + TypeScript + ECharts + Tailwind CSS 4 + lucide-react 图标库 |
+| 前端 | React 19 + TypeScript + ECharts + Tailwind CSS 4 + lucide-react 图标库 |
 | 后端 | Rust Axum，11 个 GET 端点，端口 9090，CORS 全开 |
 | 错误码 | 0=成功，400=参数错误，500=内部错误 |
 | 词云 | Hadoop Streaming + Python3/jieba，统一 ads_word_cloud 表（title/comment/danmaku，bvid 维度） |
@@ -66,9 +66,10 @@ Hadoop 集群运行在 WSL Ubuntu 上的 libvirt 管理的 3 台 CentOS 7 虚拟
 **连接方式**：
 ```bash
 ssh UbuntuDesktop                     # 进入 WSL（通过反向隧道）
-ssh hadoop@192.168.100.10             # master
-ssh hadoop@192.168.100.11             # worker1
-ssh hadoop@192.168.100.12             # worker2
+# WSL → Hadoop 集群（需用 sshpass，未配置免密）
+sshpass -p 'hadoop123' ssh hadoop@192.168.100.10   # master
+sshpass -p 'hadoop123' ssh hadoop@192.168.100.11   # worker1
+sshpass -p 'hadoop123' ssh hadoop@192.168.100.12   # worker2
 # 密码: hadoop123
 ```
 
@@ -187,9 +188,9 @@ curl http://localhost:9090/api/interaction-max
 - [x] Hadoop/Hive/Spark 环境搭建（Hadoop 3.3.6 + Hive 3.1.3 + Spark 3.5.3 集群已启动）
 - [x] 采集脚本开发 — 事务模型：日结模式，每视频按 /view→UP→评论→弹幕 全量采集，fail_count≥3 永久放弃
 - [x] Hive DDL + Spark SQL ETL — ODS/DWD/DWS/ADS 全链路 SQL，已部署到集群
-- [x] MySQL 建表 + 数据导出 — 8 张 ADS 表，Spark JDBC 导出脚本
+- [x] MySQL 建表 + 数据导出 — 9 张 ADS 表，Spark JDBC 导出脚本
 - [x] MapReduce 词云 — Hadoop Streaming + Python3/jieba，支持标题/评论/弹幕三种 source
-- [x] 数据管线全链路验证 — P10 问题已解决，8 张 ADS 表全部导出 MySQL 成功
+- [x] 数据管线全链路验证 — P10 问题已解决，9 张 ADS 表全部导出 MySQL 成功
 - [x] Rust 后端 11 个 API 实现 — Axum + sqlx 宏编译期校验，11 个 GET 端点已验证
 - [x] 弹幕限流检测 — 39 字节空响应检测 + 全局冷却机制
 - [x] ETL 去掉数据限制 — ads_hot_comments 和 ads_video_lifecycle 全量导入
@@ -222,3 +223,5 @@ curl http://localhost:9090/api/interaction-max
 - 弹幕限流检测：seg.so 返回 39 字节空响应时立即停止，`_record_429()` 计数；连续 3 次限流触发全局冷却 60s
 - ETL 无数据限制：ads_hot_comments 和 ads_video_lifecycle 全量导入（无 LIMIT）
 - 生命周期折线图 Day 1 仅有 1 个快照点（`view_growth=0`），至少需要 2 轮采集
+- Crawler 状态数据库表名：`collected_videos`、`collected_comments`、`collected_danmaku`、`collected_ups`、`failed_ups`、`snapshot_log`
+- HDFS 上传文件名格式：`{snapshot_id}_{type}.ndjson`（如 `20260603_2235_rank_video.ndjson`）
