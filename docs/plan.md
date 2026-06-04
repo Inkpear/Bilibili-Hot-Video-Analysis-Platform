@@ -1237,10 +1237,10 @@ mysql -u root bilibili -e "SELECT * FROM ads_word_cloud WHERE source_type = 'tit
 | 方法 | 路径 | 查询参数 | 返回 | MySQL 表 |
 |---|---|---|---|---|
 | GET | `/api/overview` | — | 大屏总览指标 | ads_screen_overview |
-| GET | `/api/hot-videos` | `?sort=heat&limit=20&offset=0` | 热门视频排行（分页） | ads_hot_video_rank |
+| GET | `/api/hot-videos` | `?sort=heat&limit=20&offset=0&category=游戏` | 热门视频排行（分页，支持 category 过滤） | ads_hot_video_rank |
 | GET | `/api/partition-compare` | — | 分区竞争力数据 | ads_partition_compare |
 | GET | `/api/lifecycle` | `?bvid=BVxxx` | 单视频生命周期 | ads_video_lifecycle |
-| GET | `/api/lifecycle/top` | `?limit=5` | TOP N 视频生命周期 | ads_video_lifecycle |
+| GET | `/api/lifecycle/top` | `?limit=5&sort=views&category=游戏` | TOP N 视频生命周期（支持 sort+category） | ads_video_lifecycle |
 | GET | `/api/partition-detail` | `?category=游戏` | 分区详情（视频+UP主） | 多表 JOIN |
 | GET | `/api/word-cloud` | `?source=title&category=游戏` | 词云（标题/评论/弹幕） | ads_word_cloud |
 | GET | `/api/hot-comments` | `?category=游戏&limit=20` | 热门评论排行 | ads_hot_comments |
@@ -1344,6 +1344,7 @@ tower-http = { version = "0.5", features = ["cors"] }
 | sort | string | heat | heat / views / likes / coins |
 | limit | int | 20 | 返回条数 |
 | offset | int | 0 | 偏移量 |
+| category | string | - | 分区过滤（精确匹配） |
 
 **响应 `data`**：
 
@@ -1505,6 +1506,8 @@ tower-http = { version = "0.5", features = ["cors"] }
 | 参数 | 类型 | 默认值 | 说明 |
 |---|---|---|---|
 | limit | int | 5 | TOP N 个视频 |
+| sort | string | heat | 排序字段：heat / views / likes / coins |
+| category | string | - | 分区过滤（精确匹配） |
 
 **响应 `data`**：
 

@@ -1010,3 +1010,92 @@ GET /api/partition-detail          → 400, "category is required"
 
 ### 分支
 `backend/axum-api`（从 main 新建）
+
+---
+
+## 2026-06-04 - ETL 链路修复 + 前端部署 + 功能完善
+
+### ETL 修复
+
+**问题**：Spark ETL 失败，报错 `Class org.apache.hive.hcatalog.data.JsonSerDe not found`
+
+**原因**：ODS 外部表使用 JsonSerDe，但 Spark/Hive MapReduce 任务找不到 hcatalog jar
+
+**修复**：
+1. 重建 4 张 ODS 外部表（`hive_ods_ddl.sql`）
+2. Spark ETL 加 `--jars /opt/hive/lib/hive-hcatalog-core-3.1.3.jar`
+3. Hive 词云合并加 `HIVE_AUX_JARS_PATH`
+4. `ads_word_cloud.word` VARCHAR(64) → VARCHAR(256)（jieba 分词可能超长）
+5. 更新 `run_pipeline.sh` 和 `mysql_ads_ddl.sql` 并同步到集群
+
+**验证**：8 张 ADS 表全部导出 MySQL 成功
+
+### hot-videos API 支持 category 过滤
+
+**问题**：前端切换分区后，视频太少无法触发无限滚动
+
+**原因**：后端 `/api/hot-videos` 不支持 category 参数，前端只能客户端过滤
+
+**修复**：
+- `HotVideosQuery` 加 `category: Option<String>`
+- SQL 动态 `WHERE category = ?`
+- `fetchHotVideos` 加 category 参数
+- `HotVideoTable` 传 `selectedCategory` 给 API，去掉客户端过滤
+
+### 前端部署
+
+**架构**：
+```
+浏览器 → 111.228.34.34:80 → FRP → WSL nginx:8080
+                              ├─ /     → ~/frontend/dist/
+                              └─ /api  → localhost:9090
+```
+
+**操作**：
+1. WSL 安装 nginx，配置 `/etc/nginx/sites-available/bilibili`
+2. FRP 新增 `remotePort=80` 转发到 WSL:8080
+3. 本地 `npm run build`，部署 dist/ 到 WSL
+
+### 生命周期图表联动
+
+**问题**：生命周期图表固定显示热度 Top 5，不受排序和分区影响
+
+**修复**：
+- 后端 `lifecycle/top` 支持 `sort` + `category` 参数
+- `DashboardContext` 加 `sort` / `setSort` 共享状态
+- `HotVideoTable` 改用 context 的 sort
+- `LifecycleChart` 传 sort + selectedCategory 给 API
+
+### 排序列重复修复
+
+**问题**：切换到播放/点赞排序时，表格出现重复列
+
+**原因**：硬编码的播放/点赞列与动态 `sortLabel` 列冲突
+
+**修复**：METRICS 配置 + `secondaryCols` 动态计算，表驱动法
+
+### KPI 图标升级
+
+引入 `lucide-react` 图标库替换 emoji：
+- 热门视频: `Flame`
+- 覆盖分区: `LayoutGrid`
+- 独立UP主: `Users`
+- 总播放量: `PlayCircle`
+- 总互动量: `MessageCircle`
+
+### 其他修复
+
+- `selectedCategory` null → undefined 类型转换
+- `useDashboard()` 移到 `useApi()` 之前（变量声明顺序）
+- 点击相同排序时不清空表格数据
+
+### 提交记录
+```
+b958635 fix: 点击相同排序时不清空表格数据
+ab110aa feat: KPI 卡片引入 lucide-react 图标库替换 emoji
+1f15217 feat: 生命周期图表跟随热门视频排序和分区
+0bcbbff fix: 热门视频表格排序列重复显示
+8679e95 fix: selectedCategory null → undefined 类型转换
+4262cf8 fix: HotVideoTable 变量声明顺序修复
+4b86fcb fix: hot-videos API 支持 category 过滤 + ETL hcatalog 修复
+```

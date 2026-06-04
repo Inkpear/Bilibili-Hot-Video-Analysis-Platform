@@ -245,19 +245,20 @@ GET /api/overview
 
 ## 5. `/api/hot-videos`
 
-热门视频排行，支持排序和分页。
+热门视频排行，支持排序、分区过滤和分页。
 
 ### 请求
 
 ```
-GET /api/hot-videos?sort=heat&limit=20&offset=0
+GET /api/hot-videos?sort=heat&limit=20&offset=0&category=游戏
 ```
 
 | 参数 | 类型 | 必填 | 默认值 | 说明 |
 |---|---|---|---|---|
 | `sort` | string | 否 | `heat` | 排序字段 |
-| `limit` | int | 否 | `20` | 返回条数（0~100） |
+| `limit` | int | 否 | `20` | 返回条数（0~500） |
 | `offset` | int | 否 | `0` | 偏移量（≥0） |
+| `category` | string | 否 | - | 分区过滤（精确匹配） |
 
 **`sort` 合法值**:
 
@@ -492,19 +493,22 @@ GET /api/lifecycle?bvid=BV16YGC6XEco
 
 ## 8. `/api/lifecycle/top`
 
-TOP N 热门视频的生命周期。
+TOP N 热门视频的生命周期，支持排序和分区过滤。
 
 ### 请求
 
 ```
-GET /api/lifecycle/top?limit=5
+GET /api/lifecycle/top?limit=5&sort=views&category=游戏
 ```
 
 | 参数 | 类型 | 必填 | 默认值 | 说明 |
 |---|---|---|---|---|
-| `limit` | int | 否 | `5` | 返回视频数（0~100） |
+| `limit` | int | 否 | `5` | 返回视频数（0~500） |
+| `sort` | string | 否 | `heat` | 排序字段：`heat` / `views` / `likes` / `coins` |
+| `category` | string | 否 | - | 分区过滤（精确匹配） |
 
-> TOP 依据：从 `ads_hot_video_rank` 按 `heat_score` 降序选取存在生命周期记录的视频。
+> TOP 依据：从 `ads_hot_video_rank` 按指定字段降序选取存在生命周期记录的视频。
+> 提供 `category` 时仅返回该分区的视频。
 
 ### 响应
 

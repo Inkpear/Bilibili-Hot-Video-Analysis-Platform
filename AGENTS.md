@@ -48,7 +48,7 @@ Bilibili-Hot-Video-Analysis-Platform/
 | 分区 | 动画、游戏、娱乐、音乐、舞蹈、科技、知识、影视、鬼畜、美食、汽车、时尚美妆、体育运动、动物（14 个） |
 | 输出格式 | NDJSON（每行一个 JSON 对象），含 aid/cid/collect_time/category/snapshot_id |
 | 存储 | ODS/DWD/DWS → Hive；ADS → MySQL（Spark JDBC 导出） |
-| 前端 | React 18 + TypeScript + ECharts |
+| 前端 | React 18 + TypeScript + ECharts + Tailwind CSS 4 + lucide-react 图标库 |
 | 后端 | Rust Axum，11 个 GET 端点，端口 9090，CORS 全开 |
 | 错误码 | 0=成功，400=参数错误，500=内部错误 |
 | 词云 | Hadoop Streaming + Python3/jieba，统一 ads_word_cloud 表（title/comment/danmaku，bvid 维度） |
@@ -139,17 +139,27 @@ cargo fmt                    # 格式化代码
 **后端验证**：
 ```bash
 curl http://localhost:9090/api/overview
-curl "http://localhost:9090/api/hot-videos?sort=heat&limit=10"
+curl "http://localhost:9090/api/hot-videos?sort=heat&limit=10&category=游戏"
 curl http://localhost:9090/api/partition-compare
 curl "http://localhost:9090/api/lifecycle?bvid=BVxxx"
-curl "http://localhost:9090/api/lifecycle/top?limit=5"
+curl "http://localhost:9090/api/lifecycle/top?limit=5&sort=views&category=游戏"
 curl "http://localhost:9090/api/partition-detail?category=游戏"
 curl "http://localhost:9090/api/word-cloud"
-curl "http://localhost:9090/api/word-cloud?source=comment&category=游戏"
+curl "http://localhost:9090/api/word-cloud?source=comment&category=游戏&bvid=BVxxx"
 curl "http://localhost:9090/api/hot-comments"
 curl "http://localhost:9090/api/interaction?bvid=BVxxx"
 curl http://localhost:9090/api/interaction-max
 ```
+
+**前端部署**：
+```
+浏览器 → 111.228.34.34:80 → FRP → WSL nginx:8080
+                              ├─ /     → ~/frontend/dist/ (静态文件)
+                              └─ /api  → localhost:9090 (后端反代)
+```
+- WSL 安装 nginx，配置 `/etc/nginx/sites-available/bilibili`
+- FRP 转发云服务器 80 端口到 WSL:8080
+- systemd 管理：`nginx.service`（系统级）、`frpc.service`（用户级）
 
 ## API Contract
 
@@ -158,10 +168,10 @@ curl http://localhost:9090/api/interaction-max
 | 端点 | 用途 |
 |---|---|
 | `GET /api/overview` | 大屏总览 |
-| `GET /api/hot-videos?sort=heat&limit=20&offset=0` | 热门排行（分页） |
+| `GET /api/hot-videos?sort=heat&limit=20&offset=0&category=游戏` | 热门排行（分页，支持 category 过滤） |
 | `GET /api/partition-compare` | 分区竞争力 |
 | `GET /api/lifecycle?bvid=BVxxx` | 单视频生命周期 |
-| `GET /api/lifecycle/top?limit=5` | TOP N 生命周期 |
+| `GET /api/lifecycle/top?limit=5&sort=heat&category=游戏` | TOP N 生命周期（支持 sort+category） |
 | `GET /api/partition-detail?category=游戏` | 分区下钻 |
 | `GET /api/word-cloud?source=title&category=游戏&bvid=BVxxx` | 词云（标题/评论/弹幕，支持 bvid 维度） |
 | `GET /api/hot-comments?category=游戏&limit=20` | 热门评论排行 |
@@ -183,7 +193,8 @@ curl http://localhost:9090/api/interaction-max
 - [x] Rust 后端 11 个 API 实现 — Axum + sqlx 宏编译期校验，11 个 GET 端点已验证
 - [x] 弹幕限流检测 — 39 字节空响应检测 + 全局冷却机制
 - [x] ETL 去掉数据限制 — ads_hot_comments 和 ads_video_lifecycle 全量导入
-- [ ] React 前端大屏开发
+- [x] React 前端大屏开发 — Vite 8 + React 19 + Tailwind CSS 4 + ECharts 5 + lucide-react
+- [x] 前端部署 — nginx 反代 + FRP 转发，公网访问 http://111.228.34.34:80
 - [ ] 课程报告 + PPT
 
 ## Conventions
