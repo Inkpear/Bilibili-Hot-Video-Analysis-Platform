@@ -26,11 +26,12 @@ export default function HotVideoTable() {
   const [hoveredVideo, setHoveredVideo] = useState<HotVideoItem | null>(null)
   const [mousePos, setMousePos] = useState<{ x: number; y: number }>({ x: 0, y: 0 })
 
-  const { data, loading } = useApi(() => fetchHotVideos(sort, BATCH_SIZE, 0, selectedCategory), [sort, selectedCategory])
   const {
     selectedBvid, setSelectedBvid, selectedCategory, selectedWord,
     carousel, startCarousel, stopCarousel, advanceCarousel, carouselAdvanceRef,
   } = useDashboard()
+
+  const { data, loading } = useApi(() => fetchHotVideos(sort, BATCH_SIZE, 0, selectedCategory), [sort, selectedCategory])
 
   const containerRef = useRef<HTMLDivElement>(null)
   const rowRefs = useRef<Map<string, HTMLTableRowElement>>(new Map())
