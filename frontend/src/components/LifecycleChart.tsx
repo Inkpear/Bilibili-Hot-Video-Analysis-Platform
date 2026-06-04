@@ -13,7 +13,7 @@ const COLORS = ['#00A1D6', '#FB7299', '#39D353', '#F0883E', '#A371F7']
 type MetricKey = 'view_count' | 'like_count'
 
 export default function LifecycleChart() {
-  const { selectedBvid, carousel } = useDashboard()
+  const { selectedBvid, selectedCategory, sort, carousel } = useDashboard()
   const [metric, setMetric] = useState<MetricKey>('view_count')
 
   const metricShownRef = useRef({ view: false, like: false })
@@ -41,7 +41,7 @@ export default function LifecycleChart() {
     }
   }, [carousel.on, selectedBvid])
 
-  const topData = useApi(() => fetchLifecycleTop(5), [])
+  const topData = useApi(() => fetchLifecycleTop(5, sort, selectedCategory ?? undefined), [sort, selectedCategory])
   const singleData = useApi(
     () => selectedBvid ? fetchLifecycle(selectedBvid) : Promise.resolve(null),
     [selectedBvid]

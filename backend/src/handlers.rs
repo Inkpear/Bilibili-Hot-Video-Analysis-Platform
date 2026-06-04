@@ -231,6 +231,9 @@ pub async fn lifecycle_top(
     Query(query): Query<LifecycleTopQuery>,
 ) -> Result<Json<ApiResponse<LifecycleTopData>>, AppError> {
     let limit = query.limit.unwrap_or(5);
+    let sort = query.sort.as_deref().unwrap_or("heat");
+    let category = query.category.as_deref();
+
     if !(0..=500).contains(&limit) {
         return Err(AppError::bad_request("limit must be between 0 and 500"));
     }
@@ -239,18 +242,45 @@ pub async fn lifecycle_top(
         return Ok(Json(ApiResponse::ok(LifecycleTopData { videos: vec![] })));
     }
 
-    let top_bvids: Vec<(String,)> = sqlx::query_as(
-        r#"SELECT h.bvid
-           FROM ads_hot_video_rank h
-           WHERE EXISTS (
-             SELECT 1 FROM ads_video_lifecycle l WHERE l.bvid = h.bvid
-           )
-           ORDER BY h.heat_score DESC
-           LIMIT ?"#,
-    )
-    .bind(limit)
-    .fetch_all(&pool)
-    .await?;
+    let order_col = match sort {
+        "views" => "h.view_count",
+        "likes" => "h.like_count",
+        "coins" => "h.coin_count",
+        _ => "h.heat_score",
+    };
+
+    let top_bvids: Vec<(String,)> = if let Some(cat) = category {
+        let sql = format!(
+            r#"SELECT h.bvid
+               FROM ads_hot_video_rank h
+               WHERE h.category = ? AND EXISTS (
+                 SELECT 1 FROM ads_video_lifecycle l WHERE l.bvid = h.bvid
+               )
+               ORDER BY {} DESC
+               LIMIT ?"#,
+            order_col
+        );
+        sqlx::query_as::<_, (String,)>(&sql)
+            .bind(cat)
+            .bind(limit)
+            .fetch_all(&pool)
+            .await?
+    } else {
+        let sql = format!(
+            r#"SELECT h.bvid
+               FROM ads_hot_video_rank h
+               WHERE EXISTS (
+                 SELECT 1 FROM ads_video_lifecycle l WHERE l.bvid = h.bvid
+               )
+               ORDER BY {} DESC
+               LIMIT ?"#,
+            order_col
+        );
+        sqlx::query_as::<_, (String,)>(&sql)
+            .bind(limit)
+            .fetch_all(&pool)
+            .await?
+    };
 
     let mut videos = Vec::new();
     for (bvid,) in top_bvids {

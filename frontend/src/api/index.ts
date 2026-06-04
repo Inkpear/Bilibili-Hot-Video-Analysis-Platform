@@ -83,8 +83,11 @@ export function fetchLifecycle(bvid: string) {
   return get<LifecycleData>('/api/lifecycle', { bvid });
 }
 
-export function fetchLifecycleTop(limit = 5) {
-  return get<LifecycleTopData>('/api/lifecycle/top', { limit });
+export function fetchLifecycleTop(limit = 5, sort?: string, category?: string) {
+  const params: Record<string, string | number> = { limit };
+  if (sort) params.sort = sort;
+  if (category) params.category = category;
+  return get<LifecycleTopData>('/api/lifecycle/top', params);
 }
 
 export function fetchPartitionDetail(category: string) {

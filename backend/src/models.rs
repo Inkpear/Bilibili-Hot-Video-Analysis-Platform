@@ -502,6 +502,8 @@ pub struct LifecycleQuery {
 #[derive(Debug, serde::Deserialize)]
 pub struct LifecycleTopQuery {
     pub limit: Option<i64>,
+    pub sort: Option<String>,
+    pub category: Option<String>,
 }
 
 #[derive(Debug, serde::Deserialize)]

@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useCallback, useRef } from 'react';
 import type { ReactNode } from 'react';
-import type { WordCloudSource } from '../types';
+import type { WordCloudSource, HotVideosSort } from '../types';
 
 export interface CarouselState {
   on: boolean;
@@ -16,11 +16,13 @@ interface DashboardState {
   selectedBvid: string | null;
   selectedCategory: string | null;
   selectedWord: string | null;
+  sort: HotVideosSort;
   wordCloudSource: WordCloudSource;
   carousel: CarouselState;
   setSelectedBvid: (bvid: string | null) => void;
   setSelectedCategory: (category: string | null) => void;
   setSelectedWord: (word: string | null) => void;
+  setSort: (sort: HotVideosSort) => void;
   setWordCloudSource: (source: WordCloudSource) => void;
   startCarousel: () => void;
   stopCarousel: () => void;
@@ -42,6 +44,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   const [selectedBvid, setSelectedBvid] = useState<string | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [selectedWord, setSelectedWord] = useState<string | null>(null);
+  const [sort, setSort] = useState<HotVideosSort>('heat');
   const [wordCloudSource, setWordCloudSource] = useState<WordCloudSource>('title');
   const [carousel, setCarousel] = useState<CarouselState>(CAROUSEL_INITIAL);
   const carouselAdvanceRef = useRef<(() => void) | null>(null);
@@ -109,11 +112,13 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
         selectedBvid,
         selectedCategory,
         selectedWord,
+        sort,
         wordCloudSource,
         carousel,
         setSelectedBvid: handleSetSelectedBvid,
         setSelectedCategory: handleSetSelectedCategory,
         setSelectedWord: handleSetSelectedWord,
+        setSort,
         setWordCloudSource: handleSetWordCloudSource,
         startCarousel,
         stopCarousel,

@@ -20,7 +20,6 @@ const MAX_VIDEO_MS = 20000
 const PRELOAD_THRESHOLD = 5
 
 export default function HotVideoTable() {
-  const [sort, setSort] = useState<HotVideosSort>('heat')
   const [allVideos, setAllVideos] = useState<HotVideoItem[]>([])
   const [loadingMore, setLoadingMore] = useState(false)
   const [hoveredVideo, setHoveredVideo] = useState<HotVideoItem | null>(null)
@@ -28,6 +27,7 @@ export default function HotVideoTable() {
 
   const {
     selectedBvid, setSelectedBvid, selectedCategory, selectedWord,
+    sort, setSort,
     carousel, startCarousel, stopCarousel, advanceCarousel, carouselAdvanceRef,
   } = useDashboard()
 
