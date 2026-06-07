@@ -311,3 +311,30 @@
 .animate-pulse-border {
   animation: pulse-border 0.6s ease-in-out 2;
 }
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  .bg-grid,
+  .animate-fade-in-up,
+  .animate-fade-in-scale,
+  .animate-slide-in-left,
+  .animate-slide-in-right,
+  .animate-pulse-glow,
+  .animate-shimmer,
+  .animate-float,
+  .animate-highlight-row,
+  .animate-slide-highlight,
+  .animate-content-switch,
+  .animate-fade-in,
+  .animate-pulse-border {
+    animation: none !important;
+  }
+
+  .card,
+  .card::before {
+    transition: none !important;
+  }
+}

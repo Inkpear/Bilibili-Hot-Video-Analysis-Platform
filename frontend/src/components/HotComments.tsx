@@ -1,10 +1,18 @@
-import { useRef, useEffect, useState } from 'react'
-import { useApi } from '../hooks/useApi'
+import { useCallback, useEffect, useMemo, useRef, useState, type WheelEvent } from 'react'
 import { fetchHotComments } from '../api'
 import { useDashboard } from '../context/DashboardContext'
+import { useApi } from '../hooks/useApi'
+import type { HotCommentItem } from '../types'
 import { formatNumber } from '../utils/format'
 import Card from './common/Card'
 import Loading from './common/Loading'
+
+const WINDOW_SIZE = 4
+const STEP_MS = 2000
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(Math.max(value, min), max)
+}
 
 export default function HotComments() {
   const { selectedCategory, selectedBvid, carousel, markCommentsEnded } = useDashboard()
@@ -13,106 +21,153 @@ export default function HotComments() {
     [selectedCategory, selectedBvid]
   )
 
-  const scrollRef = useRef<HTMLDivElement>(null)
-  const scrollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
-  const [activeIdx, setActiveIdx] = useState(0)
-  const hasEndedRef = useRef(false)
-
-  useEffect(() => {
-    hasEndedRef.current = false
-    setActiveIdx(0)
-  }, [selectedBvid])
-
-  useEffect(() => {
-    if (!carousel.on || !data || data.comments.length === 0) {
-      if (scrollTimerRef.current) clearInterval(scrollTimerRef.current)
-      scrollTimerRef.current = null
-      return
-    }
-
-    const comments = data.comments
-    const totalItems = comments.length
-    let currentIdx = 0
-
-    scrollTimerRef.current = setInterval(() => {
-      const el = scrollRef.current
-      if (!el) return
-
-      currentIdx = (currentIdx + 1) % totalItems
-      setActiveIdx(currentIdx)
-
-      const targetRow = el.querySelector(`[data-comment-idx="${currentIdx}"]`)
-      if (targetRow) {
-        targetRow.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
-      }
-
-      if (currentIdx === totalItems - 1 && !hasEndedRef.current) {
-        hasEndedRef.current = true
-        markCommentsEnded()
-      }
-    }, 2000)
-
-    return () => {
-      if (scrollTimerRef.current) clearInterval(scrollTimerRef.current)
-    }
-  }, [carousel.on, data, markCommentsEnded])
-
+  const comments = data?.comments ?? []
   const isCarouselActive = carousel.on && !!selectedBvid
+  const scopeKey = `${selectedCategory ?? 'all'}-${selectedBvid ?? 'all'}-${isCarouselActive ? 'auto' : 'manual'}`
+
+  const scopeLabel = useMemo(() => {
+    if (selectedBvid) return '当前视频评论'
+    if (selectedCategory) return `${selectedCategory}分区评论`
+    return '全样本热门评论'
+  }, [selectedBvid, selectedCategory])
 
   return (
-    <Card title="热门评论" className="h-full">
+    <Card
+      title="热门评论"
+      extra={
+        isCarouselActive ? (
+          <span className="rounded-full bg-bili-blue/12 px-2.5 py-1 text-[10px] text-bili-blue">轮播中</span>
+        ) : null
+      }
+      className="h-full"
+    >
       {loading ? (
-        <Loading rows={6} />
+        <Loading rows={4} />
+      ) : comments.length > 0 ? (
+        <CommentWindow
+          key={scopeKey}
+          comments={comments}
+          autoPlay={isCarouselActive}
+          onSequenceEnd={markCommentsEnded}
+          scopeLabel={scopeLabel}
+        />
       ) : (
-        <div key={selectedBvid ?? 'all'} ref={scrollRef} className="flex flex-col gap-1 overflow-auto min-h-0 h-full scrollbar-hide animate-content-switch">
-          {data?.comments.map((c, i) => {
-            const isActive = isCarouselActive && i === activeIdx
-            return (
-              <div
-                key={`${c.bvid}-${i}`}
-                data-comment-idx={i}
-                className={`
-                  flex gap-3 py-2 px-2 rounded transition-all duration-300
-                  ${isActive
-                    ? 'bg-bili-blue/10 border border-bili-blue/30'
-                    : 'border border-transparent'}
-                `}
-              >
-                <div className={`
-                  flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center
-                  text-xs font-mono-num font-bold transition-colors
-                  ${isActive ? 'bg-bili-blue text-white' : 'bg-bg-elevated text-bili-pink'}
-                `}>
-                  {i + 1}
+        <div className="flex h-full items-center justify-center text-sm text-text-muted">暂无评论数据</div>
+      )}
+    </Card>
+  )
+}
+
+function CommentWindow({
+  comments,
+  autoPlay,
+  onSequenceEnd,
+  scopeLabel,
+}: {
+  comments: HotCommentItem[]
+  autoPlay: boolean
+  onSequenceEnd: () => void
+  scopeLabel: string
+}) {
+  const [windowStart, setWindowStart] = useState(0)
+  const [activeIdx, setActiveIdx] = useState(0)
+  const endedRef = useRef(false)
+
+  const maxWindowStart = Math.max(0, comments.length - WINDOW_SIZE)
+  const safeWindowStart = clamp(windowStart, 0, maxWindowStart)
+  const safeActiveIdx = clamp(activeIdx, 0, Math.max(comments.length - 1, 0))
+  const effectiveWindowStart = autoPlay ? clamp(safeActiveIdx - 1, 0, maxWindowStart) : safeWindowStart
+  const visibleComments = comments.slice(effectiveWindowStart, effectiveWindowStart + WINDOW_SIZE)
+
+  useEffect(() => {
+    if (!autoPlay || comments.length === 0) return
+
+    endedRef.current = false
+
+    let currentIdx = 0
+    const timer = window.setInterval(() => {
+      currentIdx = (currentIdx + 1) % comments.length
+      setActiveIdx(currentIdx)
+
+      if (currentIdx === comments.length - 1 && !endedRef.current) {
+        endedRef.current = true
+        onSequenceEnd()
+      }
+    }, STEP_MS)
+
+    return () => window.clearInterval(timer)
+  }, [autoPlay, comments, onSequenceEnd])
+
+  const slideWindow = useCallback(
+    (delta: number) => {
+      if (autoPlay || comments.length <= WINDOW_SIZE) return
+      setWindowStart((prev) => clamp(prev + delta, 0, maxWindowStart))
+    },
+    [autoPlay, comments.length, maxWindowStart]
+  )
+
+  const handleWheel = useCallback(
+    (event: WheelEvent<HTMLDivElement>) => {
+      event.preventDefault()
+      event.stopPropagation()
+
+      if (autoPlay || Math.abs(event.deltaY) < 8) return
+      slideWindow(event.deltaY > 0 ? 1 : -1)
+    },
+    [autoPlay, slideWindow]
+  )
+
+  return (
+    <div className="flex h-full min-h-0 flex-col gap-2">
+      <div className="text-[11px] text-text-muted">{scopeLabel}</div>
+
+      <div
+        className="flex-1 min-h-0 space-y-1.5 overflow-hidden rounded-lg border border-border-default/35 bg-bg-primary/12 p-1.5"
+        onWheel={handleWheel}
+      >
+        {visibleComments.map((comment, index) => {
+          const actualIndex = effectiveWindowStart + index
+          const isActive = autoPlay && actualIndex === safeActiveIdx
+
+          return (
+            <div
+              key={`${comment.bvid}-${actualIndex}`}
+              className={`rounded-lg px-2 py-2 transition-colors duration-200 ${
+                isActive
+                  ? 'bg-bili-blue/10 ring-1 ring-bili-blue/30'
+                  : 'bg-bg-elevated/25 hover:bg-bg-elevated/45'
+              }`}
+            >
+              <div className="flex items-start gap-3">
+                <div
+                  className={`flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full text-xs font-bold font-mono-num ${
+                    isActive ? 'bg-bili-blue text-white' : 'bg-bg-elevated text-bili-pink'
+                  }`}
+                >
+                  {actualIndex + 1}
                 </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="text-xs text-bili-blue font-medium truncate max-w-[120px]">{c.user_name}</span>
-                    <span className="text-xs text-text-muted truncate max-w-[150px]">{c.title}</span>
+
+                <div className="min-w-0 flex-1">
+                  <div className="mb-1 flex items-center gap-2">
+                    <span className="max-w-[96px] truncate text-xs font-medium text-bili-blue">
+                      {comment.user_name}
+                    </span>
+                    <span className="max-w-[180px] truncate text-xs text-text-muted">{comment.title}</span>
                   </div>
-                  <p className="text-sm text-text-primary leading-relaxed line-clamp-2">{c.content}</p>
-                  <div className="flex items-center gap-3 mt-1">
-                    <span className="text-xs text-bili-pink">
-                      ♡ {formatNumber(c.like_count)}
-                    </span>
-                    <span className="text-xs text-text-muted">
-                      回复 {c.reply_count}
-                    </span>
-                    {c.comment_time && (
-                      <span className="text-xs text-text-muted">{c.comment_time}</span>
-                    )}
+
+                  <p className="line-clamp-2 text-sm leading-relaxed text-text-primary">{comment.content}</p>
+
+                  <div className="mt-1.5 flex items-center gap-3 text-xs text-text-muted">
+                    <span className="text-bili-pink">点赞 {formatNumber(comment.like_count)}</span>
+                    <span>回复 {comment.reply_count}</span>
+                    {comment.comment_time && <span className="truncate">{comment.comment_time}</span>}
                   </div>
                 </div>
               </div>
-            )
-          })}
-          {data?.comments.length === 0 && (
-            <div className="flex items-center justify-center h-full text-text-muted text-sm">
-              暂无评论数据
             </div>
-          )}
-        </div>
-      )}
-    </Card>
+          )
+        })}
+      </div>
+    </div>
   )
 }

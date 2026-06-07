@@ -1,13 +1,13 @@
-import type { ReactNode, CSSProperties } from 'react';
+import type { ReactNode, CSSProperties } from 'react'
 
 interface CardProps {
-  title?: string;
-  extra?: ReactNode;
-  children: ReactNode;
-  className?: string;
-  style?: CSSProperties;
-  span?: number;
-  rowSpan?: number;
+  title?: string
+  extra?: ReactNode
+  children: ReactNode
+  className?: string
+  style?: CSSProperties
+  span?: number
+  rowSpan?: number
 }
 
 export default function Card({ title, extra, children, className = '', style, span, rowSpan }: CardProps) {
@@ -21,17 +21,17 @@ export default function Card({ title, extra, children, className = '', style, sp
       }}
     >
       {(title || extra) && (
-        <div className="flex items-center justify-between px-4 py-2.5 border-b border-border-default shrink-0">
+        <div className="flex shrink-0 items-center justify-between border-b border-border-default bg-[linear-gradient(180deg,rgba(255,255,255,0.03),rgba(255,255,255,0.0))] px-4 py-2.5">
           {title && (
-            <h3 className="font-display text-xs tracking-wider text-text-secondary uppercase flex items-center gap-2">
-              <span className="w-1 h-3 bg-bili-blue rounded-full" />
+            <h3 className="flex items-center gap-2 font-display text-xs uppercase tracking-wider text-text-secondary">
+              <span className="h-3 w-1 rounded-full bg-bili-blue shadow-[0_0_10px_rgba(0,161,214,0.55)]" />
               {title}
             </h3>
           )}
-          {extra && <div className="flex items-center gap-2">{extra}</div>}
+          {extra && <div className="flex max-w-[72%] items-center justify-end gap-2 text-right">{extra}</div>}
         </div>
       )}
-      <div className="flex-1 p-3 min-h-0">{children}</div>
+      <div className="flex-1 min-h-0 p-3">{children}</div>
     </div>
-  );
+  )
 }

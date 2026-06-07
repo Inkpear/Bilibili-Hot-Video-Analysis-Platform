@@ -1,0 +1,122 @@
+[     828ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=9d9dd5e0:14337
+[    1022ms] [WARNING] [ECharts] Instance ec_1780746202619 has been disposed @ http://localhost:5173/@vite/client:524
+[    1951ms] [WARNING] [ECharts] Instance ec_1780746202623 has been disposed @ http://localhost:5173/@vite/client:524
+[    2103ms] [WARNING] [ECharts] Instance ec_1780746202623 has been disposed @ http://localhost:5173/@vite/client:524
+[    2208ms] [WARNING] [ECharts] Instance ec_1780746202627 has been disposed @ http://localhost:5173/@vite/client:524
+[    2262ms] [WARNING] [ECharts] The ticks may be not readable when set min: 0, max: 1 and alignTicks: true @ http://localhost:5173/@vite/client:524
+[    2262ms] [WARNING] [ECharts] The ticks may be not readable when set min: 0, max: 1 and alignTicks: true @ http://localhost:5173/@vite/client:524
+[    2262ms] [WARNING] [ECharts] The ticks may be not readable when set min: 0, max: 1 and alignTicks: true @ http://localhost:5173/@vite/client:524
+[    2262ms] [WARNING] [ECharts] The ticks may be not readable when set min: 0, max: 1 and alignTicks: true @ http://localhost:5173/@vite/client:524
+[    2262ms] [WARNING] [ECharts] The ticks may be not readable when set min: 0, max: 1 and alignTicks: true @ http://localhost:5173/@vite/client:524
+[    2279ms] [WARNING] [ECharts] The ticks may be not readable when set min: 0, max: 1 and alignTicks: true @ http://localhost:5173/@vite/client:524
+[    2279ms] [WARNING] [ECharts] The ticks may be not readable when set min: 0, max: 1 and alignTicks: true @ http://localhost:5173/@vite/client:524
+[    2279ms] [WARNING] [ECharts] The ticks may be not readable when set min: 0, max: 1 and alignTicks: true @ http://localhost:5173/@vite/client:524
+[    2279ms] [WARNING] [ECharts] The ticks may be not readable when set min: 0, max: 1 and alignTicks: true @ http://localhost:5173/@vite/client:524
+[    2280ms] [WARNING] [ECharts] The ticks may be not readable when set min: 0, max: 1 and alignTicks: true @ http://localhost:5173/@vite/client:524
+[    2284ms] [WARNING] [ECharts] Instance ec_1780746202631 has been disposed @ http://localhost:5173/@vite/client:524
+[    2305ms] [WARNING] [ECharts] The ticks may be not readable when set min: 0, max: 1 and alignTicks: true @ http://localhost:5173/@vite/client:524
+[    2306ms] [WARNING] [ECharts] The ticks may be not readable when set min: 0, max: 1 and alignTicks: true @ http://localhost:5173/@vite/client:524
+[    2306ms] [WARNING] [ECharts] The ticks may be not readable when set min: 0, max: 1 and alignTicks: true @ http://localhost:5173/@vite/client:524
+[    2306ms] [WARNING] [ECharts] The ticks may be not readable when set min: 0, max: 1 and alignTicks: true @ http://localhost:5173/@vite/client:524
+[    2307ms] [WARNING] [ECharts] The ticks may be not readable when set min: 0, max: 1 and alignTicks: true @ http://localhost:5173/@vite/client:524
+[    2607ms] [WARNING] [ECharts] Instance ec_1780746202619 has been disposed @ http://localhost:5173/@vite/client:524
+[    2607ms] [WARNING] [ECharts] Instance ec_1780746202623 has been disposed @ http://localhost:5173/@vite/client:524
+[    2607ms] [WARNING] [ECharts] Instance ec_1780746202627 has been disposed @ http://localhost:5173/@vite/client:524
+[    2608ms] [WARNING] [ECharts] Instance ec_1780746202631 has been disposed @ http://localhost:5173/@vite/client:524
+[    2695ms] [WARNING] [ECharts] The ticks may be not readable when set min: 0, max: 1 and alignTicks: true @ http://localhost:5173/@vite/client:524
+[    2696ms] [WARNING] [ECharts] The ticks may be not readable when set min: 0, max: 1 and alignTicks: true @ http://localhost:5173/@vite/client:524
+[    2696ms] [WARNING] [ECharts] The ticks may be not readable when set min: 0, max: 1 and alignTicks: true @ http://localhost:5173/@vite/client:524
+[    2696ms] [WARNING] [ECharts] The ticks may be not readable when set min: 0, max: 1 and alignTicks: true @ http://localhost:5173/@vite/client:524
+[    2696ms] [WARNING] [ECharts] The ticks may be not readable when set min: 0, max: 1 and alignTicks: true @ http://localhost:5173/@vite/client:524
+[  227897ms] [WARNING] [ECharts] Instance ec_1780746202619 has been disposed @ http://localhost:5173/@vite/client:524
+[  227897ms] [WARNING] [ECharts] Instance ec_1780746202623 has been disposed @ http://localhost:5173/@vite/client:524
+[  227897ms] [WARNING] [ECharts] Instance ec_1780746202627 has been disposed @ http://localhost:5173/@vite/client:524
+[  227898ms] [WARNING] [ECharts] Instance ec_1780746202631 has been disposed @ http://localhost:5173/@vite/client:524
+[  228009ms] [WARNING] [ECharts] Instance ec_1780746202619 has been disposed @ http://localhost:5173/@vite/client:524
+[  228009ms] [WARNING] [ECharts] Instance ec_1780746202623 has been disposed @ http://localhost:5173/@vite/client:524
+[  228009ms] [WARNING] [ECharts] Instance ec_1780746202627 has been disposed @ http://localhost:5173/@vite/client:524
+[  228009ms] [WARNING] [ECharts] Instance ec_1780746202631 has been disposed @ http://localhost:5173/@vite/client:524
+[  228176ms] [WARNING] [ECharts] The ticks may be not readable when set min: 0, max: 1 and alignTicks: true @ http://localhost:5173/@vite/client:524
+[  228176ms] [WARNING] [ECharts] The ticks may be not readable when set min: 0, max: 1 and alignTicks: true @ http://localhost:5173/@vite/client:524
+[  228176ms] [WARNING] [ECharts] The ticks may be not readable when set min: 0, max: 1 and alignTicks: true @ http://localhost:5173/@vite/client:524
+[  228177ms] [WARNING] [ECharts] The ticks may be not readable when set min: 0, max: 1 and alignTicks: true @ http://localhost:5173/@vite/client:524
+[  228177ms] [WARNING] [ECharts] The ticks may be not readable when set min: 0, max: 1 and alignTicks: true @ http://localhost:5173/@vite/client:524
+[ 2772340ms] [WARNING] [ECharts] Instance ec_1780746202634 has been disposed @ http://localhost:5173/@vite/client:524
+[ 2772610ms] [WARNING] [ECharts] Instance ec_1780746202634 has been disposed @ http://localhost:5173/@vite/client:524
+[ 2773068ms] [WARNING] [ECharts] Instance ec_1780746202637 has been disposed @ http://localhost:5173/@vite/client:524
+[ 2773783ms] [WARNING] [ECharts] The ticks may be not readable when set min: 0, max: 1 and alignTicks: true @ http://localhost:5173/@vite/client:524
+[ 2773783ms] [WARNING] [ECharts] The ticks may be not readable when set min: 0, max: 1 and alignTicks: true @ http://localhost:5173/@vite/client:524
+[ 2773784ms] [WARNING] [ECharts] The ticks may be not readable when set min: 0, max: 1 and alignTicks: true @ http://localhost:5173/@vite/client:524
+[ 2773784ms] [WARNING] [ECharts] The ticks may be not readable when set min: 0, max: 1 and alignTicks: true @ http://localhost:5173/@vite/client:524
+[ 2773784ms] [WARNING] [ECharts] The ticks may be not readable when set min: 0, max: 1 and alignTicks: true @ http://localhost:5173/@vite/client:524
+[ 2773821ms] [WARNING] [ECharts] Instance ec_1780746202634 has been disposed @ http://localhost:5173/@vite/client:524
+[ 2773821ms] [WARNING] [ECharts] Instance ec_1780746202637 has been disposed @ http://localhost:5173/@vite/client:524
+[ 2773824ms] [WARNING] [ECharts] The ticks may be not readable when set min: 0, max: 1 and alignTicks: true @ http://localhost:5173/@vite/client:524
+[ 2773824ms] [WARNING] [ECharts] The ticks may be not readable when set min: 0, max: 1 and alignTicks: true @ http://localhost:5173/@vite/client:524
+[ 2773824ms] [WARNING] [ECharts] The ticks may be not readable when set min: 0, max: 1 and alignTicks: true @ http://localhost:5173/@vite/client:524
+[ 2773825ms] [WARNING] [ECharts] The ticks may be not readable when set min: 0, max: 1 and alignTicks: true @ http://localhost:5173/@vite/client:524
+[ 2773825ms] [WARNING] [ECharts] The ticks may be not readable when set min: 0, max: 1 and alignTicks: true @ http://localhost:5173/@vite/client:524
+[ 2774468ms] [ERROR] %o
+
+%s
+
+%s
+ Error: Heatmap must use with visualMap
+    at HeatmapView.render (http://localhost:5173/node_modules/.vite/deps/echarts-for-react.js?v=9d9dd5e0:22548:37)
+    at Task.progress (http://localhost:5173/node_modules/.vite/deps/install-G1-gEX30.js?v=9d9dd5e0:19738:17)
+    at Task._doProgress (http://localhost:5173/node_modules/.vite/deps/install-G1-gEX30.js?v=9d9dd5e0:17323:8)
+    at Task.perform (http://localhost:5173/node_modules/.vite/deps/install-G1-gEX30.js?v=9d9dd5e0:17307:15)
+    at http://localhost:5173/node_modules/.vite/deps/install-G1-gEX30.js?v=9d9dd5e0:23120:20
+    at GlobalModel.<anonymous> (http://localhost:5173/node_modules/.vite/deps/install-G1-gEX30.js?v=9d9dd5e0:15868:7)
+    at Array.forEach (<anonymous>)
+    at each$2 (http://localhost:5173/node_modules/.vite/deps/install-G1-gEX30.js?v=9d9dd5e0:341:56)
+    at GlobalModel.eachSeries (http://localhost:5173/node_modules/.vite/deps/install-G1-gEX30.js?v=9d9dd5e0:15866:3)
+    at renderSeries (http://localhost:5173/node_modules/.vite/deps/install-G1-gEX30.js?v=9d9dd5e0:23113:12) The above error occurred in the <EChartsReact> component. React will try to recreate this component tree from scratch using the error boundary you provided, ErrorBoundary. @ http://localhost:5173/@vite/client:524
+[ 2774480ms] [ERROR] Dashboard error: Error: Heatmap must use with visualMap
+    at HeatmapView.render (http://localhost:5173/node_modules/.vite/deps/echarts-for-react.js?v=9d9dd5e0:22548:37)
+    at Task.progress (http://localhost:5173/node_modules/.vite/deps/install-G1-gEX30.js?v=9d9dd5e0:19738:17)
+    at Task._doProgress (http://localhost:5173/node_modules/.vite/deps/install-G1-gEX30.js?v=9d9dd5e0:17323:8)
+    at Task.perform (http://localhost:5173/node_modules/.vite/deps/install-G1-gEX30.js?v=9d9dd5e0:17307:15)
+    at http://localhost:5173/node_modules/.vite/deps/install-G1-gEX30.js?v=9d9dd5e0:23120:20
+    at GlobalModel.<anonymous> (http://localhost:5173/node_modules/.vite/deps/install-G1-gEX30.js?v=9d9dd5e0:15868:7)
+    at Array.forEach (<anonymous>)
+    at each$2 (http://localhost:5173/node_modules/.vite/deps/install-G1-gEX30.js?v=9d9dd5e0:341:56)
+    at GlobalModel.eachSeries (http://localhost:5173/node_modules/.vite/deps/install-G1-gEX30.js?v=9d9dd5e0:15866:3)
+    at renderSeries (http://localhost:5173/node_modules/.vite/deps/install-G1-gEX30.js?v=9d9dd5e0:23113:12) {componentStack: 
+    at EChartsReact (http://localhost:5173/node_m…host:5173/src/context/DashboardContext.tsx:16:37)} @ http://localhost:5173/@vite/client:524
+[ 2774621ms] [WARNING] [ECharts] The ticks may be not readable when set min: 0, max: 1 and alignTicks: true @ http://localhost:5173/@vite/client:524
+[ 2774621ms] [WARNING] [ECharts] The ticks may be not readable when set min: 0, max: 1 and alignTicks: true @ http://localhost:5173/@vite/client:524
+[ 2774621ms] [WARNING] [ECharts] The ticks may be not readable when set min: 0, max: 1 and alignTicks: true @ http://localhost:5173/@vite/client:524
+[ 2774621ms] [WARNING] [ECharts] The ticks may be not readable when set min: 0, max: 1 and alignTicks: true @ http://localhost:5173/@vite/client:524
+[ 2774622ms] [WARNING] [ECharts] The ticks may be not readable when set min: 0, max: 1 and alignTicks: true @ http://localhost:5173/@vite/client:524
+[ 2774782ms] [WARNING] [ECharts] Instance ec_1780746202634 has been disposed @ http://localhost:5173/@vite/client:524
+[ 2774782ms] [WARNING] [ECharts] Instance ec_1780746202637 has been disposed @ http://localhost:5173/@vite/client:524
+[ 2774783ms] [WARNING] [ECharts] Instance ec_1780746202640 has been disposed @ http://localhost:5173/@vite/client:524
+[ 2806961ms] [ERROR] %o
+
+%s
+
+%s
+ Error: Heatmap must use with visualMap
+    at HeatmapView.render (http://localhost:5173/node_modules/.vite/deps/echarts-for-react.js?v=9d9dd5e0:22548:37)
+    at Task.progress (http://localhost:5173/node_modules/.vite/deps/install-G1-gEX30.js?v=9d9dd5e0:19738:17)
+    at Task._doProgress (http://localhost:5173/node_modules/.vite/deps/install-G1-gEX30.js?v=9d9dd5e0:17323:8)
+    at Task.perform (http://localhost:5173/node_modules/.vite/deps/install-G1-gEX30.js?v=9d9dd5e0:17307:15)
+    at http://localhost:5173/node_modules/.vite/deps/install-G1-gEX30.js?v=9d9dd5e0:23120:20
+    at GlobalModel.<anonymous> (http://localhost:5173/node_modules/.vite/deps/install-G1-gEX30.js?v=9d9dd5e0:15868:7)
+    at Array.forEach (<anonymous>)
+    at each$2 (http://localhost:5173/node_modules/.vite/deps/install-G1-gEX30.js?v=9d9dd5e0:341:56)
+    at GlobalModel.eachSeries (http://localhost:5173/node_modules/.vite/deps/install-G1-gEX30.js?v=9d9dd5e0:15866:3)
+    at renderSeries (http://localhost:5173/node_modules/.vite/deps/install-G1-gEX30.js?v=9d9dd5e0:23113:12) The above error occurred in the <EChartsReact> component. React will try to recreate this component tree from scratch using the error boundary you provided, ErrorBoundary. @ http://localhost:5173/@vite/client:524
+[ 2806962ms] [ERROR] Dashboard error: Error: Heatmap must use with visualMap
+    at HeatmapView.render (http://localhost:5173/node_modules/.vite/deps/echarts-for-react.js?v=9d9dd5e0:22548:37)
+    at Task.progress (http://localhost:5173/node_modules/.vite/deps/install-G1-gEX30.js?v=9d9dd5e0:19738:17)
+    at Task._doProgress (http://localhost:5173/node_modules/.vite/deps/install-G1-gEX30.js?v=9d9dd5e0:17323:8)
+    at Task.perform (http://localhost:5173/node_modules/.vite/deps/install-G1-gEX30.js?v=9d9dd5e0:17307:15)
+    at http://localhost:5173/node_modules/.vite/deps/install-G1-gEX30.js?v=9d9dd5e0:23120:20
+    at GlobalModel.<anonymous> (http://localhost:5173/node_modules/.vite/deps/install-G1-gEX30.js?v=9d9dd5e0:15868:7)
+    at Array.forEach (<anonymous>)
+    at each$2 (http://localhost:5173/node_modules/.vite/deps/install-G1-gEX30.js?v=9d9dd5e0:341:56)
+    at GlobalModel.eachSeries (http://localhost:5173/node_modules/.vite/deps/install-G1-gEX30.js?v=9d9dd5e0:15866:3)
+    at renderSeries (http://localhost:5173/node_modules/.vite/deps/install-G1-gEX30.js?v=9d9dd5e0:23113:12) {componentStack: 
+    at EChartsReact (http://localhost:5173/node_m…host:5173/src/context/DashboardContext.tsx:16:37)} @ http://localhost:5173/@vite/client:524

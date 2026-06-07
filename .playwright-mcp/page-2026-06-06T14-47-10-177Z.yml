@@ -1,0 +1,88 @@
+- generic [ref=e3]:
+  - generic [ref=e5]:
+    - generic [ref=e12]:
+      - heading "BILIBILI数据终端" [level=1] [ref=e13]
+      - paragraph [ref=e14]: HOT VIDEO ANALYSIS PLATFORM
+    - generic [ref=e16]:
+      - generic [ref=e17]:
+        - img [ref=e19]
+        - generic [ref=e22]: 热门视频
+      - generic [ref=e24]:
+        - img [ref=e26]
+        - generic [ref=e32]: 覆盖分区
+      - generic [ref=e34]:
+        - img [ref=e36]
+        - generic [ref=e42]: 独立UP主
+      - generic [ref=e44]:
+        - img [ref=e46]
+        - generic [ref=e50]: 总播放量
+      - generic [ref=e52]:
+        - img [ref=e54]
+        - generic [ref=e57]: 总互动量
+    - generic [ref=e59]:
+      - heading "分区排行" [level=3] [ref=e63]: 分区排行
+      - generic [ref=e74]:
+        - heading "热门视频" [level=3] [ref=e75]: 热门视频
+        - generic [ref=e78]:
+          - button "开启轮播" [ref=e79]
+          - generic [ref=e80]:
+            - button "热度" [ref=e81]
+            - button "播放" [ref=e82]
+            - button "点赞" [ref=e83]
+            - button "投币" [ref=e84]
+      - generic [ref=e95]:
+        - heading "生命周期" [level=3] [ref=e96]: 生命周期
+        - generic [ref=e100]:
+          - button "播放量" [ref=e101]
+          - button "点赞数" [ref=e102]
+      - generic [ref=e112]:
+        - heading "词云" [level=3] [ref=e113]: 词云
+        - generic [ref=e117]:
+          - button "标题" [ref=e118]
+          - button "评论" [ref=e119]
+          - button "弹幕" [ref=e120]
+      - heading "热门评论" [level=3] [ref=e130]: 热门评论
+      - heading "互动质量" [level=3] [ref=e141]: 互动质量
+  - generic [ref=e150]:
+    - generic [ref=e151]:
+      - generic [ref=e152]:
+        - generic [ref=e153]:
+          - generic [ref=e154]: Deep Analysis
+          - heading "扩展分析视图" [level=2] [ref=e155]
+        - paragraph [ref=e156]: 第二屏承接分区矩阵、互动拆解和分区下钻，让主看板保持紧凑清晰，也方便在答辩时顺着样本差异继续展开讲解。
+      - generic [ref=e157]:
+        - generic [ref=e158]: 点击矩阵锁定分区
+        - generic [ref=e159]: 聚焦视频查看互动结构
+        - generic [ref=e160]: 继续下钻代表视频与头部 UP
+    - generic [ref=e161]:
+      - generic [ref=e163]:
+        - generic [ref=e164]:
+          - heading "分区指标矩阵" [level=3] [ref=e165]: 分区指标矩阵
+          - generic [ref=e168]: 点击单元格切换分区
+        - generic [ref=e170]:
+          - generic [ref=e171]:
+            - generic [ref=e172]: 自动聚焦头部分区
+            - generic [ref=e173]: 色深 = 同列相对位置
+          - generic [ref=e174]: 暂无分区对比数据
+      - generic [ref=e176]:
+        - generic [ref=e177]:
+          - heading "互动构成" [level=3] [ref=e178]: 互动构成
+          - generic [ref=e181]: 当前榜单 Top 1
+        - generic [ref=e183]:
+          - generic [ref=e184]:
+            - generic [ref=e185]: 等待视频数据
+            - generic [ref=e186]:
+              - generic [ref=e187]:
+                - generic [ref=e188]: 播放基数
+                - generic [ref=e189]: "-"
+              - generic [ref=e190]:
+                - generic [ref=e191]: 总互动量
+                - generic [ref=e192]: "-"
+          - generic [ref=e193]: 暂无互动结构数据
+      - generic [ref=e195]:
+        - generic [ref=e196]:
+          - heading "分区下钻" [level=3] [ref=e197]: 分区下钻
+          - generic [ref=e200]:
+            - generic [ref=e201]: 自动聚焦
+            - generic [ref=e202]: 等待数据
+        - generic [ref=e205]: 暂无分区下钻数据

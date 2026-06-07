@@ -5,7 +5,7 @@ export default function Header() {
   const { data } = useApi(fetchOverview)
 
   return (
-    <header className="flex items-center justify-between">
+    <header className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
       <div className="flex items-center gap-4">
         <div className="relative">
           <div className="w-1.5 h-8 bg-gradient-to-b from-bili-blue to-bili-pink rounded-full" />
@@ -23,7 +23,7 @@ export default function Header() {
       </div>
 
       {data && (
-        <div className="flex items-center gap-6">
+        <div className="flex flex-wrap items-center gap-4 xl:gap-6">
           <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-bg-card border border-border-default">
             <div className="w-1.5 h-1.5 rounded-full bg-positive animate-pulse" />
             <span className="text-[10px] text-text-muted">LIVE</span>

@@ -1,254 +1,210 @@
-import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
-import { useApi } from '../hooks/useApi'
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent, type WheelEvent } from 'react'
 import { fetchHotVideos } from '../api'
 import { useDashboard } from '../context/DashboardContext'
+import { useApi } from '../hooks/useApi'
+import type { HotVideoItem, HotVideosSort } from '../types'
 import { formatNumber, formatPercent } from '../utils/format'
 import Card from './common/Card'
 import Loading from './common/Loading'
-import type { HotVideosSort, HotVideoItem } from '../types'
 
-const SORT_OPTIONS: { value: HotVideosSort; label: string }[] = [
+const SORT_OPTIONS: Array<{ value: HotVideosSort; label: string }> = [
   { value: 'heat', label: '热度' },
   { value: 'views', label: '播放' },
   { value: 'likes', label: '点赞' },
   { value: 'coins', label: '投币' },
 ]
 
-const BATCH_SIZE = 50
+const FETCH_LIMIT = 50
+const WINDOW_SIZE = 6
 const MAX_VIDEO_MS = 20000
-const PRELOAD_THRESHOLD = 5
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(Math.max(value, min), max)
+}
 
 export default function HotVideoTable() {
-  const [allVideos, setAllVideos] = useState<HotVideoItem[]>([])
-  const [loadingMore, setLoadingMore] = useState(false)
+  const [windowStart, setWindowStart] = useState(0)
   const [hoveredVideo, setHoveredVideo] = useState<HotVideoItem | null>(null)
-  const [mousePos, setMousePos] = useState<{ x: number; y: number }>({ x: 0, y: 0 })
+  const [mousePos, setMousePos] = useState({ x: 0, y: 0 })
 
   const {
-    selectedBvid, setSelectedBvid, selectedCategory, selectedWord,
-    sort, setSort,
-    carousel, startCarousel, stopCarousel, advanceCarousel, carouselAdvanceRef,
+    selectedBvid,
+    setSelectedBvid,
+    selectedCategory,
+    selectedWord,
+    sort,
+    setSort,
+    carousel,
+    startCarousel,
+    stopCarousel,
+    advanceCarousel,
+    carouselAdvanceRef,
   } = useDashboard()
 
-  const { data, loading } = useApi(() => fetchHotVideos(sort, BATCH_SIZE, 0, selectedCategory ?? undefined), [sort, selectedCategory])
+  const { data, loading } = useApi(
+    () => fetchHotVideos(sort, FETCH_LIMIT, 0, selectedCategory ?? undefined),
+    [sort, selectedCategory]
+  )
 
-  const containerRef = useRef<HTMLDivElement>(null)
-  const rowRefs = useRef<Map<string, HTMLTableRowElement>>(new Map())
-  const isLoadingRef = useRef(false)
-  const offsetRef = useRef(0)
-  const hasMoreRef = useRef(true)
-  const videosRef = useRef<HotVideoItem[]>([])
-  const videoStartRef = useRef<number>(0)
+  const videoStartRef = useRef(0)
   const prevSelectedBvid = useRef<string | null>(null)
 
-  // ---- filtered videos ----
   const videos = useMemo(() => {
-    let list = allVideos
-    if (selectedWord) list = list.filter((v) => v.title.includes(selectedWord))
-    return list
-  }, [allVideos, selectedWord])
-
-  useEffect(() => { videosRef.current = videos }, [videos])
-
-  // ---- init on data change ----
-  useEffect(() => {
-    if (data) {
-      setAllVideos(data.videos)
-      offsetRef.current = BATCH_SIZE
-      hasMoreRef.current = BATCH_SIZE < data.total
+    let nextVideos = data?.videos ?? []
+    if (selectedWord) {
+      nextVideos = nextVideos.filter((video) => video.title.includes(selectedWord))
     }
-  }, [data])
+    return nextVideos
+  }, [data, selectedWord])
 
-  // ---- 1. unified loader with lock ----
-  const loadMore = useCallback(async () => {
-    if (isLoadingRef.current || !hasMoreRef.current) return
-    isLoadingRef.current = true
-    setLoadingMore(true)
-    try {
-      const curOffset = offsetRef.current
-      const res = await fetchHotVideos(sort, BATCH_SIZE, curOffset, selectedCategory ?? undefined)
-      setAllVideos((prev) => {
-        const existing = new Set(prev.map((v) => v.bvid))
-        const newItems = res.videos.filter((v) => !existing.has(v.bvid))
-        return [...prev, ...newItems]
-      })
-      offsetRef.current = curOffset + BATCH_SIZE
-      hasMoreRef.current = curOffset + BATCH_SIZE < res.total
-    } finally {
-      isLoadingRef.current = false
-      setLoadingMore(false)
-    }
-  }, [sort, selectedCategory])
+  const maxWindowStart = Math.max(0, videos.length - WINDOW_SIZE)
+  const safeWindowStart = clamp(windowStart, 0, maxWindowStart)
+  const selectedIndex = selectedBvid ? videos.findIndex((video) => video.bvid === selectedBvid) : -1
+  const focusWindowStart =
+    selectedIndex >= 0 ? clamp(selectedIndex - Math.floor(WINDOW_SIZE / 2), 0, maxWindowStart) : safeWindowStart
+  const effectiveWindowStart =
+    selectedIndex >= 0 &&
+    (carousel.on || selectedIndex < safeWindowStart || selectedIndex >= safeWindowStart + WINDOW_SIZE)
+      ? focusWindowStart
+      : safeWindowStart
+  const visibleVideos = videos.slice(effectiveWindowStart, effectiveWindowStart + WINDOW_SIZE)
+  const wordCloudDone = carousel.wordCloud.commentShown && carousel.wordCloud.danmakuShown
 
-  // ---- 2. manual scroll detection ----
-  const handleScroll = useCallback(() => {
-    const el = containerRef.current
-    if (!el) return
-    const { scrollTop, clientHeight, scrollHeight } = el
-    if (scrollTop + clientHeight >= scrollHeight - 100) {
-      loadMore()
-    }
-  }, [loadMore])
+  const metrics = {
+    heat: { label: '热度', getValue: (video: HotVideoItem) => video.heat_score.toFixed(3) },
+    views: { label: '播放', getValue: (video: HotVideoItem) => formatNumber(video.view_count) },
+    likes: { label: '点赞', getValue: (video: HotVideoItem) => formatNumber(video.like_count) },
+    coins: { label: '投币', getValue: (video: HotVideoItem) => formatNumber(video.coin_count) },
+  } as const
 
-  // ---- 3. focus centering algorithm ----
-  const scrollToFocus = useCallback((bvid: string) => {
-    const container = containerRef.current
-    const row = rowRefs.current.get(bvid)
-    if (!container || !row) return
+  const secondaryCols: Array<keyof typeof metrics> =
+    sort === 'views' ? ['heat', 'likes'] : sort === 'likes' ? ['views', 'heat'] : ['views', 'likes']
 
-    const targetTop = row.offsetTop - container.clientHeight / 2 + row.clientHeight / 2
-    container.scrollTo({
-      top: Math.max(0, targetTop),
-      behavior: 'smooth',
-    })
-  }, [])
+  const centerWindowOnIndex = useCallback(
+    (index: number) => {
+      setWindowStart(clamp(index - Math.floor(WINDOW_SIZE / 2), 0, maxWindowStart))
+    },
+    [maxWindowStart]
+  )
 
-  // ---- 4. scroll to selected on bvid change (non-carousel) ----
-  useEffect(() => {
-    if (carousel.on) return
-    if (!selectedBvid || selectedBvid === prevSelectedBvid.current) return
-    prevSelectedBvid.current = selectedBvid
-    scrollToFocus(selectedBvid)
-  }, [selectedBvid, carousel.on, scrollToFocus])
+  const focusVideoByIndex = useCallback(
+    (index: number) => {
+      const nextVideo = videos[index]
+      if (!nextVideo) return
 
-  // ---- 5. carousel advance engine ----
+      prevSelectedBvid.current = nextVideo.bvid
+      videoStartRef.current = Date.now()
+      centerWindowOnIndex(index)
+      setSelectedBvid(nextVideo.bvid)
+    },
+    [videos, centerWindowOnIndex, setSelectedBvid]
+  )
+
   const doAdvance = useCallback(() => {
-    const vids = videosRef.current
-    if (vids.length === 0) return
+    if (videos.length === 0) return
 
-    const curBvid = prevSelectedBvid.current
-    const curIdx = vids.findIndex((v) => v.bvid === curBvid)
-    const nextIdx = (curIdx + 1) % vids.length
+    const currentBvid = prevSelectedBvid.current ?? selectedBvid
+    const currentIndex = currentBvid ? videos.findIndex((video) => video.bvid === currentBvid) : -1
+    const nextIndex = currentIndex >= 0 ? (currentIndex + 1) % videos.length : 0
 
-    // pre-load when approaching end
-    if (nextIdx >= vids.length - PRELOAD_THRESHOLD) {
-      loadMore()
-    }
-
-    // if wrapped around and no more data, stay at last
-    if (nextIdx >= vids.length && !hasMoreRef.current) return
-
-    const nextBvid = vids[nextIdx >= vids.length ? 0 : nextIdx]?.bvid ?? null
-    prevSelectedBvid.current = nextBvid
-    setSelectedBvid(nextBvid)
-    videoStartRef.current = Date.now()
-
-    // scroll to the new focus
-    if (nextBvid) {
-      requestAnimationFrame(() => scrollToFocus(nextBvid))
-    }
-  }, [setSelectedBvid, loadMore, scrollToFocus])
+    focusVideoByIndex(nextIndex)
+  }, [focusVideoByIndex, selectedBvid, videos])
 
   useEffect(() => {
     carouselAdvanceRef.current = doAdvance
-  }, [doAdvance, carouselAdvanceRef])
+  }, [carouselAdvanceRef, doAdvance])
 
-  // ---- 6. carousel timer (driven by word cloud + comments signals) ----
   useEffect(() => {
     if (!carousel.on) return
-    const { commentShown, danmakuShown } = carousel.wordCloud
-    const wcDone = commentShown && danmakuShown
-    const commentsDone = carousel.commentsEnded
-    if (wcDone && commentsDone) { advanceCarousel(); return }
-    const elapsed = Date.now() - videoStartRef.current
-    const remaining = MAX_VIDEO_MS - elapsed
-    if (remaining <= 0) { advanceCarousel(); return }
-    const timeout = setTimeout(() => advanceCarousel(), remaining)
-    return () => clearTimeout(timeout)
-  }, [carousel.on, carousel.wordCloud.commentShown, carousel.wordCloud.danmakuShown, carousel.commentsEnded, advanceCarousel])
 
-  // ---- 7. toggle carousel ----
+    if (wordCloudDone && carousel.commentsEnded) {
+      advanceCarousel()
+      return
+    }
+
+    const remaining = MAX_VIDEO_MS - (Date.now() - videoStartRef.current)
+    if (remaining <= 0) {
+      advanceCarousel()
+      return
+    }
+
+    const timeout = window.setTimeout(() => advanceCarousel(), remaining)
+    return () => window.clearTimeout(timeout)
+  }, [advanceCarousel, carousel.commentsEnded, carousel.on, wordCloudDone])
+
+  useEffect(() => () => stopCarousel(), [stopCarousel])
+
   const handleToggleCarousel = useCallback(() => {
     if (carousel.on) {
       stopCarousel()
       return
     }
-    videoStartRef.current = Date.now()
-    if (videos.length > 0) {
-      const firstBvid = videos[0].bvid
-      prevSelectedBvid.current = firstBvid
-      setSelectedBvid(firstBvid)
-      requestAnimationFrame(() => scrollToFocus(firstBvid))
-    }
+
+    focusVideoByIndex(selectedIndex >= 0 ? selectedIndex : 0)
     startCarousel()
-  }, [carousel.on, videos, setSelectedBvid, startCarousel, stopCarousel, scrollToFocus])
+  }, [carousel.on, focusVideoByIndex, selectedIndex, startCarousel, stopCarousel])
 
-  useEffect(() => () => stopCarousel(), []) // eslint-disable-line react-hooks/exhaustive-deps
+  const slideWindow = useCallback(
+    (delta: number) => {
+      if (videos.length <= WINDOW_SIZE) return
+      setWindowStart((prev) => clamp(prev + delta, 0, maxWindowStart))
+    },
+    [maxWindowStart, videos.length]
+  )
 
-  // ---- 8. hover ----
-  const handleMouseMove = useCallback((video: HotVideoItem | null, e: React.MouseEvent) => {
+  const handleWheel = useCallback(
+    (event: WheelEvent<HTMLDivElement>) => {
+      event.preventDefault()
+      event.stopPropagation()
+
+      if (Math.abs(event.deltaY) < 8) return
+      slideWindow(event.deltaY > 0 ? 1 : -1)
+    },
+    [slideWindow]
+  )
+
+  const handleMouseMove = useCallback((video: HotVideoItem | null, event: MouseEvent<HTMLTableRowElement>) => {
     setHoveredVideo(video)
-    setMousePos({ x: e.clientX, y: e.clientY })
+    setMousePos({ x: event.clientX, y: event.clientY })
   }, [])
-
-  // ---- register row ref ----
-  const setRowRef = useCallback((bvid: string, el: HTMLTableRowElement | null) => {
-    if (el) {
-      rowRefs.current.set(bvid, el)
-    } else {
-      rowRefs.current.delete(bvid)
-    }
-  }, [])
-
-  const METRICS = {
-    heat: { label: '热度', getValue: (v: HotVideoItem) => v.heat_score.toFixed(3) },
-    views: { label: '播放', getValue: (v: HotVideoItem) => formatNumber(v.view_count) },
-    likes: { label: '点赞', getValue: (v: HotVideoItem) => formatNumber(v.like_count) },
-    coins: { label: '投币', getValue: (v: HotVideoItem) => formatNumber(v.coin_count) },
-  }
-
-  const secondaryCols: (keyof typeof METRICS)[] = sort === 'views'
-    ? ['heat', 'likes']
-    : sort === 'likes'
-      ? ['views', 'heat']
-      : ['views', 'likes']
-
-  const wcDone = carousel.on && carousel.wordCloud.commentShown && carousel.wordCloud.danmakuShown
-  const hasMore = hasMoreRef.current
 
   const extra = (
     <div className="flex items-center gap-2">
       <button
+        type="button"
         onClick={handleToggleCarousel}
-        className={`flex items-center gap-1 px-2 py-0.5 text-xs rounded transition-all ${
+        className={`inline-flex min-h-8 items-center gap-1 rounded-md px-2.5 py-1 text-xs transition-colors focus:outline-none focus:ring-2 focus:ring-bili-blue/60 ${
           carousel.on
             ? 'bg-bili-pink text-white'
-            : 'text-text-muted hover:text-text-secondary border border-border-default hover:border-bili-blue'
+            : 'border border-border-default text-text-muted hover:border-bili-blue hover:text-text-primary'
         }`}
       >
         {carousel.on ? (
           <>
-            <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
-            停止
-            {wcDone && <span className="text-[10px] ml-0.5 opacity-70">词云✓</span>}
-            {carousel.commentsEnded && <span className="text-[10px] ml-0.5 opacity-70">评论✓</span>}
+            <span className="h-1.5 w-1.5 rounded-full bg-white animate-pulse" />
+            轮播中
           </>
         ) : (
-          <>
-            <span>▶</span>
-            轮播
-          </>
+          '开启轮播'
         )}
       </button>
-      <div className="flex gap-1">
-        {SORT_OPTIONS.map((s) => (
+
+      <div className="flex items-center gap-1">
+        {SORT_OPTIONS.map((option) => (
           <button
-            key={s.value}
+            key={option.value}
+            type="button"
             onClick={() => {
-              if (sort === s.value) return
-              setSort(s.value)
-              setAllVideos([])
-              offsetRef.current = 0
-              hasMoreRef.current = true
+              if (sort === option.value) return
+              setSort(option.value)
+              setWindowStart(0)
             }}
-            className={`px-2 py-0.5 text-xs rounded transition-colors ${
-              sort === s.value
-                ? 'bg-bili-blue text-white'
-                : 'text-text-muted hover:text-text-secondary'
+            className={`min-h-8 rounded-md px-2.5 py-1 text-xs transition-colors focus:outline-none focus:ring-2 focus:ring-bili-blue/60 ${
+              sort === option.value ? 'bg-bili-blue text-white' : 'text-text-muted hover:text-text-primary'
             }`}
           >
-            {s.label}
+            {option.label}
           </button>
         ))}
       </div>
@@ -257,134 +213,143 @@ export default function HotVideoTable() {
 
   return (
     <Card title="热门视频" extra={extra} className="h-full">
-      {loading && allVideos.length === 0 ? (
-        <Loading rows={8} />
+      {loading ? (
+        <Loading rows={6} />
       ) : (
-        <div className="flex flex-col h-full min-h-0">
-          {selectedWord && (
-            <div className="px-1 pb-2 text-xs text-text-muted shrink-0">
-              标题包含 <span className="text-bili-pink font-medium">「{selectedWord}」</span> 的视频
+        <div className="flex h-full min-h-0 flex-col gap-2">
+          {(selectedCategory || selectedWord) && (
+            <div className="flex flex-wrap items-center gap-2 text-[11px] text-text-muted">
+              {selectedCategory && (
+                <span className="rounded-full bg-bg-elevated/70 px-2.5 py-1 text-text-secondary">
+                  当前分区：{selectedCategory}
+                </span>
+              )}
+              {selectedWord && (
+                <span className="rounded-full bg-bili-pink/12 px-2.5 py-1 text-bili-pink">关键词：{selectedWord}</span>
+              )}
             </div>
           )}
 
           <div
-            ref={containerRef}
-            onScroll={handleScroll}
-            className="flex-1 overflow-auto min-h-0 scrollbar-hide"
+            className="flex-1 min-h-0 overflow-hidden rounded-lg border border-border-default/35 bg-bg-primary/12"
+            onWheel={handleWheel}
           >
-            <table className="w-full text-xs">
-              <thead className="sticky top-0 bg-bg-card z-10">
-                <tr className="text-text-muted border-b border-border-default">
-                  <th className="py-1.5 text-left w-8">#</th>
-                  <th className="py-1.5 text-left">标题</th>
-                  <th className="py-1.5 text-left">UP主</th>
-                  <th className="py-1.5 text-left">分区</th>
-                  <th className="py-1.5 text-right">{METRICS[secondaryCols[0]].label}</th>
-                  <th className="py-1.5 text-right">{METRICS[secondaryCols[1]].label}</th>
-                  <th className="py-1.5 text-right text-bili-pink">{METRICS[sort].label}</th>
+            <table className="w-full table-fixed text-xs">
+              <thead>
+                <tr className="border-b border-border-default/80 text-text-muted">
+                  <th className="w-9 py-2 text-left">#</th>
+                  <th className="py-2 text-left">标题</th>
+                  <th className="w-24 py-2 text-left">UP</th>
+                  <th className="w-16 py-2 text-left">分区</th>
+                  <th className="w-18 py-2 text-right">{metrics[secondaryCols[0]].label}</th>
+                  <th className="w-18 py-2 text-right">{metrics[secondaryCols[1]].label}</th>
+                  <th className="w-20 py-2 pr-3 text-right text-bili-pink">{metrics[sort].label}</th>
                 </tr>
               </thead>
+
               <tbody>
-                {videos.map((v, i) => {
-                  const isSelected = v.bvid === selectedBvid
+                {visibleVideos.map((video, index) => {
+                  const actualIndex = effectiveWindowStart + index
+                  const isSelected = video.bvid === selectedBvid
+
                   return (
                     <tr
-                      key={v.bvid}
-                      ref={(el) => setRowRef(v.bvid, el)}
+                      key={video.bvid}
                       onClick={() => {
                         if (carousel.on) return
-                        setSelectedBvid(v.bvid === selectedBvid ? null : v.bvid)
+
+                        prevSelectedBvid.current = video.bvid
+                        centerWindowOnIndex(actualIndex)
+                        setSelectedBvid(video.bvid === selectedBvid ? null : video.bvid)
                       }}
-                      onMouseMove={(e) => {
-                        if (!carousel.on) handleMouseMove(v, e)
+                      onMouseMove={(event) => {
+                        if (!carousel.on) handleMouseMove(video, event)
                       }}
                       onMouseLeave={() => setHoveredVideo(null)}
-                      className={`
-                        border-b border-border-default/30 transition-all duration-300
-                        ${carousel.on ? 'cursor-default' : 'cursor-pointer'}
-                        ${isSelected
-                          ? 'bg-bili-blue/10 border-l-2 border-l-bili-blue animate-pulse-border'
-                          : 'hover:bg-bg-elevated'}
-                      `}
+                      className={`border-b border-border-default/25 transition-colors duration-200 ${
+                        carousel.on ? 'cursor-default' : 'cursor-pointer'
+                      } ${isSelected ? 'bg-bili-blue/10' : 'hover:bg-bg-elevated/65'}`}
                     >
-                      <td className="py-1.5 font-mono-num text-text-muted">{i + 1}</td>
-                      <td className="py-1.5 max-w-[180px] truncate text-text-primary">{v.title}</td>
-                      <td className="py-1.5 text-text-muted max-w-[80px] truncate">{v.up_name}</td>
-                      <td className="py-1.5 text-text-muted">
-                        <span className="px-1.5 py-0.5 rounded bg-bg-elevated text-[10px]">{v.category}</span>
+                      <td className="py-2 font-mono-num text-text-muted">{actualIndex + 1}</td>
+                      <td className="py-2 pr-2 text-text-primary">
+                        <div className="truncate">{video.title}</div>
                       </td>
-                      <td className="py-1.5 text-right font-mono-num text-text-secondary">
-                        {METRICS[secondaryCols[0]].getValue(v)}
+                      <td className="py-2 text-text-secondary">
+                        <div className="truncate">{video.up_name}</div>
                       </td>
-                      <td className="py-1.5 text-right font-mono-num text-text-secondary">
-                        {METRICS[secondaryCols[1]].getValue(v)}
+                      <td className="py-2 text-text-muted">
+                        <span className="rounded bg-bg-elevated px-1.5 py-0.5 text-[10px]">{video.category}</span>
                       </td>
-                      <td className="py-1.5 text-right font-mono-num text-bili-pink font-semibold">
-                        {METRICS[sort].getValue(v)}
+                      <td className="py-2 text-right font-mono-num text-text-secondary">
+                        {metrics[secondaryCols[0]].getValue(video)}
+                      </td>
+                      <td className="py-2 text-right font-mono-num text-text-secondary">
+                        {metrics[secondaryCols[1]].getValue(video)}
+                      </td>
+                      <td className="py-2 pr-3 text-right font-mono-num font-semibold text-bili-pink">
+                        {metrics[sort].getValue(video)}
                       </td>
                     </tr>
                   )
                 })}
+
+                {visibleVideos.length === 0 && (
+                  <tr>
+                    <td colSpan={7} className="py-12 text-center text-sm text-text-muted">
+                      暂无视频数据
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
-
-            <div className="h-8 flex items-center justify-center">
-              {loadingMore && (
-                <div className="w-4 h-4 border-2 border-bili-blue border-t-transparent rounded-full animate-spin" />
-              )}
-              {!hasMore && videos.length > 0 && (
-                <span className="text-[10px] text-text-muted">— 已加载全部 {videos.length} 条 —</span>
-              )}
-            </div>
           </div>
         </div>
       )}
 
-      {hoveredVideo && !carousel.on && createPortal(
-        <HoverCard video={hoveredVideo} mousePos={mousePos} />,
-        document.body
-      )}
+      {hoveredVideo &&
+        !carousel.on &&
+        createPortal(<HoverCard video={hoveredVideo} mousePos={mousePos} />, document.body)}
     </Card>
   )
 }
 
 function HoverCard({ video, mousePos }: { video: HotVideoItem; mousePos: { x: number; y: number } }) {
-  const rates = video.view_count > 0 ? {
-    like: video.like_count / video.view_count,
-    coin: video.coin_count / video.view_count,
-    fav: video.favorite_count / video.view_count,
-    reply: video.reply_count / video.view_count,
-    share: video.share_count / video.view_count,
-  } : null
+  const rates =
+    video.view_count > 0
+      ? {
+          like: video.like_count / video.view_count,
+          coin: video.coin_count / video.view_count,
+          favorite: video.favorite_count / video.view_count,
+          reply: video.reply_count / video.view_count,
+          share: video.share_count / video.view_count,
+        }
+      : null
 
-  const W = 260
-  const H = 220
-  const GAP = 14
+  const width = 260
+  const height = 220
+  const gap = 14
 
-  let left = mousePos.x + GAP
-  let top = mousePos.y + GAP
+  let left = mousePos.x + gap
+  let top = mousePos.y + gap
 
-  if (left + W > window.innerWidth - GAP) left = mousePos.x - W - GAP
-  if (top + H > window.innerHeight - GAP) top = mousePos.y - H - GAP
-  if (left < GAP) left = GAP
-  if (top < GAP) top = GAP
+  if (left + width > window.innerWidth - gap) left = mousePos.x - width - gap
+  if (top + height > window.innerHeight - gap) top = mousePos.y - height - gap
+  if (left < gap) left = gap
+  if (top < gap) top = gap
 
   return (
-    <div
-      className="pointer-events-none"
-      style={{ position: 'fixed', left, top, zIndex: 2147483647 }}
-    >
+    <div className="pointer-events-none" style={{ position: 'fixed', left, top, zIndex: 2147483647 }}>
       <div
-        className="bg-bg-card border border-bili-blue/30 rounded-lg p-3 w-[260px] animate-fade-in"
+        className="w-[260px] rounded-lg border border-bili-blue/30 bg-bg-card p-3 animate-fade-in"
         style={{ boxShadow: '0 8px 32px rgba(0,0,0,0.6), 0 0 0 1px rgba(0,161,214,0.2)' }}
       >
-        <div className="text-sm font-medium text-text-primary mb-2 line-clamp-1">{video.title}</div>
-        <div className="flex items-center gap-2 mb-3">
+        <div className="mb-2 line-clamp-1 text-sm font-medium text-text-primary">{video.title}</div>
+        <div className="mb-3 flex items-center gap-2">
           <span className="text-xs text-bili-blue">{video.up_name}</span>
-          <span className="text-[10px] text-text-muted px-1.5 py-0.5 rounded bg-bg-elevated">{video.category}</span>
+          <span className="rounded bg-bg-elevated px-1.5 py-0.5 text-[10px] text-text-muted">{video.category}</span>
         </div>
 
-        <div className="grid grid-cols-3 gap-2 mb-3">
+        <div className="mb-3 grid grid-cols-3 gap-2">
           {[
             { label: '播放', value: video.view_count, color: '#00A1D6' },
             { label: '点赞', value: video.like_count, color: '#FB7299' },
@@ -404,19 +369,19 @@ function HoverCard({ video, mousePos }: { video: HotVideoItem; mousePos: { x: nu
 
         {rates && (
           <div className="border-t border-border-default pt-2">
-            <div className="text-[10px] text-text-muted mb-1">互动率</div>
+            <div className="mb-1 text-[10px] text-text-muted">互动率</div>
             <div className="grid grid-cols-5 gap-1">
               {[
                 { label: '赞', value: rates.like, color: '#FB7299' },
                 { label: '币', value: rates.coin, color: '#39D353' },
-                { label: '藏', value: rates.fav, color: '#F0883E' },
+                { label: '藏', value: rates.favorite, color: '#F0883E' },
                 { label: '评', value: rates.reply, color: '#A371F7' },
-                { label: '享', value: rates.share, color: '#79C0FF' },
-              ].map((r) => (
-                <div key={r.label} className="text-center">
-                  <div className="text-[9px] text-text-muted">{r.label}</div>
-                  <div className="font-mono-num text-[10px]" style={{ color: r.color }}>
-                    {formatPercent(r.value)}
+                { label: '转', value: rates.share, color: '#79C0FF' },
+              ].map((rate) => (
+                <div key={rate.label} className="text-center">
+                  <div className="text-[9px] text-text-muted">{rate.label}</div>
+                  <div className="font-mono-num text-[10px]" style={{ color: rate.color }}>
+                    {formatPercent(rate.value)}
                   </div>
                 </div>
               ))}

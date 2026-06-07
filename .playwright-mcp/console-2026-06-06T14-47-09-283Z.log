@@ -1,0 +1,5 @@
+[     552ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://127.0.0.1:4173/node_modules/.vite/deps/react-dom_client.js?v=9d9dd5e0:14337
+[     810ms] [WARNING] [ECharts] Instance ec_1780757229861 has been disposed @ http://127.0.0.1:4173/@vite/client:524
+[     939ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ http://127.0.0.1:4173/api/overview:0
+[   16529ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ http://127.0.0.1:4173/api/lifecycle/top?limit=5&sort=heat:0
+[   28002ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ http://127.0.0.1:4173/api/hot-videos?sort=heat&limit=1&offset=0:0
