@@ -1,0 +1,9 @@
+[crawler]
+interval = 600
+concurrency = 5
+max_retries = 3
+output_dir = "~/output"
+
+[api]
+base_url = "https://api.bilibili.com"
+user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
