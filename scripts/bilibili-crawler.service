@@ -1,0 +1,14 @@
+[Unit]
+Description=Bilibili Hot Video Crawler
+After=network.target
+
+[Service]
+Type=simple
+User=inkpear
+WorkingDirectory=/home/inkpear/crawler
+ExecStart=/home/inkpear/crawler/target/release/bilibili-crawler
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=default.target
