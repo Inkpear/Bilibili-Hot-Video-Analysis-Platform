@@ -1,15 +1,16 @@
 use anyhow::Result;
-use tracing::{info, error};
+use tracing::info;
 
 mod config;
 mod api;
 mod models;
 mod storage;
 mod scheduler;
+mod error;
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    tracing_subscriber::init();
+    tracing_subscriber::fmt::init();
     info!("Bilibili Crawler starting...");
     
     let config = config::Config::load()?;
