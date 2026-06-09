@@ -1,33 +1,46 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 
 interface UseApiResult<T> {
   data: T | null;
   loading: boolean;
-  error: Error | null;
+  error: string | null;
   refetch: () => void;
 }
 
-export function useApi<T>(fetcher: () => Promise<T>, deps: unknown[]): UseApiResult<T> {
+export function useApi<T>(
+  fetcher: () => Promise<T>,
+  deps: unknown[] = []
+): UseApiResult<T> {
   const [data, setData] = useState<T | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<Error | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [trigger, setTrigger] = useState(0);
 
-  const fetchData = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const result = await fetcher();
-      setData(result);
-    } catch (err) {
-      setError(err as Error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const refetch = useCallback(() => setTrigger((n) => n + 1), []);
 
   useEffect(() => {
-    fetchData();
-  }, deps);
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
 
-  return { data, loading, error, refetch: fetchData };
+    fetcher()
+      .then((res) => {
+        if (!cancelled) {
+          setData(res);
+          setLoading(false);
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : '请求失败');
+          setLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [trigger, ...deps]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  return { data, loading, error, refetch };
 }

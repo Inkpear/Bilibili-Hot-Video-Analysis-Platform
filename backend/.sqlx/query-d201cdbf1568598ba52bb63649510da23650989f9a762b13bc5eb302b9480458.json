@@ -1,0 +1,64 @@
+{
+  "db_name": "MySQL",
+  "query": "SELECT\n            CAST(MAX(CASE WHEN view_count > 0 THEN like_count / view_count ELSE 0 END) AS DOUBLE) AS `max_like_rate: f64`,\n            CAST(MAX(CASE WHEN view_count > 0 THEN coin_count / view_count ELSE 0 END) AS DOUBLE) AS `max_coin_rate: f64`,\n            CAST(MAX(CASE WHEN view_count > 0 THEN favorite_count / view_count ELSE 0 END) AS DOUBLE) AS `max_fav_rate: f64`,\n            CAST(MAX(CASE WHEN view_count > 0 THEN reply_count / view_count ELSE 0 END) AS DOUBLE) AS `max_reply_rate: f64`,\n            CAST(MAX(CASE WHEN view_count > 0 THEN share_count / view_count ELSE 0 END) AS DOUBLE) AS `max_share_rate: f64`\n        FROM hot_video\n        WHERE snapshot_date = (SELECT MAX(snapshot_date) FROM snapshot_dates)",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "max_like_rate: f64",
+        "type_info": {
+          "type": "Double",
+          "flags": "BINARY",
+          "max_size": 23
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "max_coin_rate: f64",
+        "type_info": {
+          "type": "Double",
+          "flags": "BINARY",
+          "max_size": 23
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "max_fav_rate: f64",
+        "type_info": {
+          "type": "Double",
+          "flags": "BINARY",
+          "max_size": 23
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "max_reply_rate: f64",
+        "type_info": {
+          "type": "Double",
+          "flags": "BINARY",
+          "max_size": 23
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "max_share_rate: f64",
+        "type_info": {
+          "type": "Double",
+          "flags": "BINARY",
+          "max_size": 23
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      true,
+      true,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "d201cdbf1568598ba52bb63649510da23650989f9a762b13bc5eb302b9480458"
+}

@@ -1,0 +1,104 @@
+{
+  "db_name": "MySQL",
+  "query": "SELECT\n                    c.bvid, h.title, h.category, h.up_name, c.user_name, c.content,\n                    CAST(c.like_count AS SIGNED) AS like_count,\n                    CAST(c.reply_count AS SIGNED) AS reply_count,\n                    DATE_FORMAT(FROM_UNIXTIME(c.comment_time DIV 1000), '%Y-%m-%d %H:%i:%s') AS `comment_time: String`\n                FROM comment_info c\n                JOIN hot_video h ON c.bvid = h.bvid AND c.snapshot_date = h.snapshot_date\n                WHERE h.category = ? AND h.snapshot_date = (SELECT MAX(snapshot_date) FROM snapshot_dates)\n                ORDER BY c.like_count DESC\n                LIMIT ?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "bvid",
+        "type_info": {
+          "type": "Blob",
+          "flags": "BLOB",
+          "max_size": 262140
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "title",
+        "type_info": {
+          "type": "Blob",
+          "flags": "BLOB",
+          "max_size": 262140
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "category",
+        "type_info": {
+          "type": "Blob",
+          "flags": "BLOB",
+          "max_size": 262140
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "up_name",
+        "type_info": {
+          "type": "Blob",
+          "flags": "BLOB",
+          "max_size": 262140
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "user_name",
+        "type_info": {
+          "type": "Blob",
+          "flags": "BLOB",
+          "max_size": 262140
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "content",
+        "type_info": {
+          "type": "Blob",
+          "flags": "BLOB",
+          "max_size": 262140
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "like_count",
+        "type_info": {
+          "type": "LongLong",
+          "flags": "BINARY",
+          "max_size": 21
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "reply_count",
+        "type_info": {
+          "type": "LongLong",
+          "flags": "BINARY",
+          "max_size": 21
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "comment_time: String",
+        "type_info": {
+          "type": "VarString",
+          "flags": "",
+          "max_size": 96
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "e034b5352a57cebee7e26be4b74993dd917f93bf0f713a52ff09169d7e70c23f"
+}

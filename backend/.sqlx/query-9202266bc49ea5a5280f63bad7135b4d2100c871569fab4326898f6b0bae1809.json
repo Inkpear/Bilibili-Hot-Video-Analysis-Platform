@@ -1,0 +1,64 @@
+{
+  "db_name": "MySQL",
+  "query": "SELECT\n                word, snapshot_date,\n                CAST(total_count AS SIGNED) AS total_count,\n                category, source_type\n            FROM word_trend\n            WHERE word = ? AND category = ? AND source_type = ?\n            ORDER BY snapshot_date ASC",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "word",
+        "type_info": {
+          "type": "Blob",
+          "flags": "BLOB",
+          "max_size": 262140
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "snapshot_date",
+        "type_info": {
+          "type": "Blob",
+          "flags": "NOT_NULL | BLOB | NO_DEFAULT_VALUE",
+          "max_size": 262140
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "total_count",
+        "type_info": {
+          "type": "LongLong",
+          "flags": "BINARY",
+          "max_size": 21
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "category",
+        "type_info": {
+          "type": "Blob",
+          "flags": "NOT_NULL | BLOB | NO_DEFAULT_VALUE",
+          "max_size": 262140
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "source_type",
+        "type_info": {
+          "type": "Blob",
+          "flags": "NOT_NULL | BLOB | NO_DEFAULT_VALUE",
+          "max_size": 262140
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": [
+      true,
+      false,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "9202266bc49ea5a5280f63bad7135b4d2100c871569fab4326898f6b0bae1809"
+}

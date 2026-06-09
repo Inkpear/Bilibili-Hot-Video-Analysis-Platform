@@ -1,0 +1,10 @@
+[Unit]
+Description=B站热门视频采集定时器 (每天一轮)
+
+[Timer]
+OnCalendar=daily
+RandomizedDelaySec=60
+Persistent=true
+
+[Install]
+WantedBy=timers.target

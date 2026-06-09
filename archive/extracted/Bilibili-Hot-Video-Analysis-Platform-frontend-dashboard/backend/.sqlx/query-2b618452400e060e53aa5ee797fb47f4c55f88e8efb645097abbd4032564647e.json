@@ -1,0 +1,34 @@
+{
+  "db_name": "MySQL",
+  "query": "SELECT\n            word AS `name: String`,\n            word_count AS `value: i32`\n        FROM ads_word_cloud\n        WHERE source_type = ? AND category = ?\n        ORDER BY word_count DESC\n        LIMIT 100",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "name: String",
+        "type_info": {
+          "type": "VarString",
+          "flags": "MULTIPLE_KEY",
+          "max_size": 256
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "value: i32",
+        "type_info": {
+          "type": "Long",
+          "flags": "",
+          "max_size": 11
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      true,
+      true
+    ]
+  },
+  "hash": "2b618452400e060e53aa5ee797fb47f4c55f88e8efb645097abbd4032564647e"
+}

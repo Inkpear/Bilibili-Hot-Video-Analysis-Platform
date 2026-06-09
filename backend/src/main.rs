@@ -1,42 +1,84 @@
-// backend/src/main.rs
-use axum::{Router, routing::get};
+use axum::Router;
 use tower_http::cors::CorsLayer;
-use sqlx::MySqlPool;
-use std::sync::Arc;
 
+mod auth;
+mod config;
+mod db;
+mod error;
 mod handlers;
 mod models;
 
-pub struct AppState {
-    db: MySqlPool,
-}
-
 #[tokio::main]
-async fn main() -> anyhow::Result<()> {
-    tracing_subscriber::init();
-    
-    let database_url = std::env::var("DATABASE_URL")
-        .unwrap_or_else(|_| "mysql://root:password@localhost/bilibili".to_string());
-    
-    let pool = MySqlPool::connect(&database_url).await?;
-    
-    let state = Arc::new(AppState { db: pool });
-    
+async fn main() {
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| "bilibili_hot_backend=info,tower_http=info".into()),
+        )
+        .init();
+
+    let cfg = config::AppConfig::load();
+
+    if cfg.auth_enabled() {
+        tracing::info!("auth enabled, token required");
+    } else {
+        tracing::warn!("auth disabled, no API_TOKEN configured");
+    }
+
+    let pool = db::create_pool()
+        .await
+        .expect("failed to create database pool");
+
+    let api_routes = Router::new()
+        .route("/api/overview", axum::routing::get(handlers::overview))
+        .route("/api/hot-videos", axum::routing::get(handlers::hot_videos))
+        .route(
+            "/api/partition-compare",
+            axum::routing::get(handlers::partition_compare),
+        )
+        .route("/api/lifecycle", axum::routing::get(handlers::lifecycle))
+        .route(
+            "/api/lifecycle/top",
+            axum::routing::get(handlers::lifecycle_top),
+        )
+        .route(
+            "/api/partition-detail",
+            axum::routing::get(handlers::partition_detail),
+        )
+        .route("/api/word-cloud", axum::routing::get(handlers::word_cloud))
+        .route(
+            "/api/hot-comments",
+            axum::routing::get(handlers::hot_comments),
+        )
+        .route(
+            "/api/interaction",
+            axum::routing::get(handlers::interaction),
+        )
+        .route(
+            "/api/interaction-max",
+            axum::routing::get(handlers::interaction_max),
+        )
+        .route(
+            "/api/word-trend",
+            axum::routing::get(handlers::word_trend),
+        )
+        .route(
+            "/api/snapshot-dates",
+            axum::routing::get(handlers::snapshot_dates),
+        );
+
     let app = Router::new()
-        .route("/api/overview", get(handlers::overview))
-        .route("/api/partitions", get(handlers::partitions))
-        .route("/api/partition-heatmap", get(handlers::partition_heatmap))
-        .route("/api/trend", get(handlers::trend))
-        .route("/api/word-cloud", get(handlers::word_cloud))
-        .route("/api/videos", get(handlers::videos))
-        .route("/api/video/{bvid}", get(handlers::video_detail))
-        .route("/api/word-trend", get(handlers::word_trend))
-        .route("/api/snapshot-dates", get(handlers::snapshot_dates))
+        .merge(api_routes)
+        .layer(axum::middleware::from_fn_with_state(
+            cfg.clone(),
+            auth::auth_middleware,
+        ))
         .layer(CorsLayer::permissive())
-        .with_state(state);
-    
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:9090").await?;
-    axum::serve(listener, app).await?;
-    
-    Ok(())
+        .with_state(pool);
+
+    let bind = &cfg.bind;
+    tracing::info!("listening on {}", bind);
+
+    let listener = tokio::net::TcpListener::bind(bind).await.unwrap();
+    axum::serve(listener, app).await.unwrap();
 }

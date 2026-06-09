@@ -12,6 +12,7 @@ CREATE TABLE hot_video (
     description TEXT,
     tags VARCHAR(1000),
     sub_category VARCHAR(50),
+    category VARCHAR(100),
     duration INT,
     publish_time BIGINT,
     up_id VARCHAR(20),
@@ -24,8 +25,28 @@ CREATE TABLE hot_video (
     share_count BIGINT DEFAULT 0,
     reply_count BIGINT DEFAULT 0,
     danmaku_count BIGINT DEFAULT 0,
+    rank_name VARCHAR(100),
+    rank_position INT,
+    rank_source VARCHAR(50),
+    url VARCHAR(500),
+    snapshot_id VARCHAR(50),
+    collect_time BIGINT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (bvid, snapshot_date)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- UP主信息表
+CREATE TABLE up_info (
+    up_id VARCHAR(50) NOT NULL,
+    snapshot_date VARCHAR(8) NOT NULL,
+    up_name VARCHAR(200),
+    up_avatar VARCHAR(500),
+    follower_count INT DEFAULT 0,
+    video_count INT DEFAULT 0,
+    sign TEXT,
+    official_verify VARCHAR(200),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (up_id, snapshot_date)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- 互动指标表

@@ -1,0 +1,84 @@
+{
+  "db_name": "MySQL",
+  "query": "SELECT\n            bvid,\n            view_count,\n            like_count,\n            coin_count,\n            favorite_count,\n            reply_count,\n            share_count\n        FROM ads_hot_video_rank\n        WHERE bvid = ?\n        LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "bvid",
+        "type_info": {
+          "type": "VarString",
+          "flags": "NOT_NULL | PRIMARY_KEY | NO_DEFAULT_VALUE",
+          "max_size": 128
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "view_count",
+        "type_info": {
+          "type": "LongLong",
+          "flags": "",
+          "max_size": 20
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "like_count",
+        "type_info": {
+          "type": "LongLong",
+          "flags": "",
+          "max_size": 20
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "coin_count",
+        "type_info": {
+          "type": "LongLong",
+          "flags": "",
+          "max_size": 20
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "favorite_count",
+        "type_info": {
+          "type": "LongLong",
+          "flags": "",
+          "max_size": 20
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "reply_count",
+        "type_info": {
+          "type": "LongLong",
+          "flags": "",
+          "max_size": 20
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "share_count",
+        "type_info": {
+          "type": "LongLong",
+          "flags": "",
+          "max_size": 20
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "fc7c6f5cae7dd9c7d03bded2f216f8278e258c38135b5af39aa2438b8704dd8a"
+}

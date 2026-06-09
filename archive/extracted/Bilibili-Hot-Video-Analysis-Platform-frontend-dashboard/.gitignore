@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Rust
+backend/target/
+
+# Node
+node_modules/
+frontend/dist/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+
+# Env
+.env
+
+# Prompt
+prompt.md
+
+# Data output (large files)
+output/
+
+# Crawler state
+crawler/crawler_state.db*
+crawler/logs/
+
+# Python
+*.egg
+dist/
+build/

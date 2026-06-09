@@ -1,0 +1,25 @@
+serverAddr = "111.228.34.34"
+serverPort = 7001
+auth.token = "791bf26363f8d7103f2aabe4cd3e49fb"
+loginFailExit = false
+
+[[proxies]]
+name = "ssh"
+type = "tcp"
+localIP = "127.0.0.1"
+localPort = 22
+remotePort = 9822
+
+[[proxies]]
+name = "bilibili-api"
+type = "tcp"
+localIP = "127.0.0.1"
+localPort = 9090
+remotePort = 9091
+
+[[proxies]]
+name = "bilibili-web"
+type = "tcp"
+localIP = "127.0.0.1"
+localPort = 80
+remotePort = 80

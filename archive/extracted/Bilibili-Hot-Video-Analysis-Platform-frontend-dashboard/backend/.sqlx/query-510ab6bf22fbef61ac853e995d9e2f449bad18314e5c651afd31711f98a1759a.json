@@ -1,0 +1,104 @@
+{
+  "db_name": "MySQL",
+  "query": "SELECT\n                    bvid, title, category, up_name, user_name, content,\n                    like_count, reply_count,\n                    DATE_FORMAT(comment_time, '%Y-%m-%d %H:%i:%s') AS `comment_time: String`\n                FROM ads_hot_comments\n                WHERE category = ?\n                ORDER BY like_count DESC\n                LIMIT ?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "bvid",
+        "type_info": {
+          "type": "VarString",
+          "flags": "MULTIPLE_KEY",
+          "max_size": 128
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "title",
+        "type_info": {
+          "type": "VarString",
+          "flags": "",
+          "max_size": 2048
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "category",
+        "type_info": {
+          "type": "VarString",
+          "flags": "MULTIPLE_KEY",
+          "max_size": 256
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "up_name",
+        "type_info": {
+          "type": "VarString",
+          "flags": "",
+          "max_size": 512
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "user_name",
+        "type_info": {
+          "type": "VarString",
+          "flags": "",
+          "max_size": 512
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "content",
+        "type_info": {
+          "type": "Blob",
+          "flags": "BLOB",
+          "max_size": 262140
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "like_count",
+        "type_info": {
+          "type": "LongLong",
+          "flags": "MULTIPLE_KEY",
+          "max_size": 20
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "reply_count",
+        "type_info": {
+          "type": "LongLong",
+          "flags": "",
+          "max_size": 20
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "comment_time: String",
+        "type_info": {
+          "type": "VarString",
+          "flags": "",
+          "max_size": 96
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "510ab6bf22fbef61ac853e995d9e2f449bad18314e5c651afd31711f98a1759a"
+}
