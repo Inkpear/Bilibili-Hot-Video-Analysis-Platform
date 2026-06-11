@@ -2,8 +2,11 @@ use std::collections::{HashSet, VecDeque};
 use std::sync::{Arc, Mutex as StdMutex};
 use std::time::Duration;
 
+use indicatif::ProgressStyle;
 use tokio::sync::Semaphore;
-use tracing::{error, info, warn};
+use tokio::task::JoinSet;
+use tracing::{error, info, info_span, warn};
+use tracing_indicatif::span_ext::IndicatifSpanExt;
 
 use crate::api::ranking::{self, RankedVideo};
 use crate::api::{comment, danmaku, up, video};
@@ -119,14 +122,25 @@ pub async fn run_crawl(config: &Config, state: &Arc<StateManager>) -> Result<()>
     // 3. Phase 1: Fetch rankings with first worker
     let first_worker = &workers[0];
     let cookie = first_worker.cookie();
-    let ranked_videos = ranking::fetch_all_rankings(
-        &first_worker.client,
-        &cookie,
-        &config.api.base_url,
-        first_worker.wbi(),
-        0,
-    )
-    .await?;
+
+    let ranking_span = info_span!("ranking");
+    ranking_span.pb_set_length(ranking::PARTITION_RIDS.len() as u64);
+    ranking_span.pb_set_style(
+        &ProgressStyle::with_template("{prefix:>10} {bar} {pos}/{len} partitions").unwrap(),
+    );
+
+    let ranked_videos = {
+        let _guard = ranking_span.enter();
+        ranking::fetch_all_rankings(
+            &first_worker.client,
+            &cookie,
+            &config.api.base_url,
+            first_worker.wbi(),
+            0,
+        )
+        .await?
+    };
+    drop(ranking_span);
 
     info!(count = ranked_videos.len(), "rankings fetched");
 
@@ -158,74 +172,48 @@ pub async fn run_crawl(config: &Config, state: &Arc<StateManager>) -> Result<()>
     );
 
     // 5. Phase 2: Semaphore + per-task spawn
-    // Semaphore limits concurrency to number of workers (accounts).
-    // Worker pool: tasks pop a worker, use it, push it back.
     let concurrency = workers.len();
     let semaphore = Arc::new(Semaphore::new(concurrency));
     let pool = Arc::new(StdMutex::new(VecDeque::from(workers)));
-
     let writer = Arc::new(writer);
     let max_retries = config.limits.max_retries_per_task;
 
-    let mut handles: Vec<tokio::task::JoinHandle<Result<()>>> = Vec::new();
-
-    for (i, rv) in ranked_videos.iter().enumerate() {
+    // Collect tasks first to get the count
+    let mut tasks_to_spawn: Vec<Task> = Vec::new();
+    for rv in ranked_videos.iter() {
         if state.video_done(&rv.bvid)? {
             continue;
         }
-
         let tasks = state.get_video_tasks_needed(&rv.bvid, &rv.up_id)?;
-
         if tasks.needs_detail {
-            let task = Task::VideoDetail {
+            tasks_to_spawn.push(Task::VideoDetail {
                 bvid: rv.bvid.clone(),
                 ranked: Box::new(rv.clone()),
-            };
-            handles.push(spawn_task(
-                task, &pool, &semaphore, state, &writer, &ctx, max_retries,
-            ));
+            });
         }
         if tasks.needs_up && !state.should_skip_up(&rv.up_id)? {
-            let task = Task::UpInfo {
+            tasks_to_spawn.push(Task::UpInfo {
                 up_id: rv.up_id.clone(),
                 bvid: rv.bvid.clone(),
-            };
-            handles.push(spawn_task(
-                task, &pool, &semaphore, state, &writer, &ctx, max_retries,
-            ));
+            });
         }
         if tasks.needs_comments {
-            let task = Task::Comments {
+            tasks_to_spawn.push(Task::Comments {
                 bvid: rv.bvid.clone(),
                 aid: rv.aid,
-            };
-            handles.push(spawn_task(
-                task, &pool, &semaphore, state, &writer, &ctx, max_retries,
-            ));
+            });
         }
         if tasks.needs_danmaku {
-            let task = Task::Danmaku {
+            tasks_to_spawn.push(Task::Danmaku {
                 bvid: rv.bvid.clone(),
                 cid: rv.cid,
                 danmaku_count: rv.danmaku_count,
-            };
-            handles.push(spawn_task(
-                task, &pool, &semaphore, state, &writer, &ctx, max_retries,
-            ));
-        }
-
-        if (i + 1) % 200 == 0 {
-            info!(
-                processed = i + 1,
-                total = ranked_videos.len(),
-                tasks_spawned = handles.len(),
-                "spawning tasks..."
-            );
+            });
         }
     }
 
-    let task_count = handles.len();
-    info!(tasks = task_count, "all tasks spawned");
+    let task_count = tasks_to_spawn.len();
+    info!(tasks = task_count, "all tasks collected");
 
     if task_count == 0 {
         info!("no tasks to process");
@@ -233,11 +221,34 @@ pub async fn run_crawl(config: &Config, state: &Arc<StateManager>) -> Result<()>
         return Ok(());
     }
 
-    // 6. Wait for all tasks to complete
+    // Create tasks span with progress bar
+    let tasks_span = info_span!("tasks", total = task_count);
+    tasks_span.pb_set_length(task_count as u64);
+    tasks_span.pb_set_style(
+        &ProgressStyle::with_template("{prefix:>10} {bar} {pos}/{len} ({percent}%)").unwrap(),
+    );
+    let _tasks_guard = tasks_span.enter();
+
+    // Spawn all tasks into a JoinSet (completion-order processing)
+    let mut join_set = JoinSet::new();
+    for task in tasks_to_spawn {
+        spawn_task_into(
+            task,
+            &pool,
+            &semaphore,
+            state,
+            &writer,
+            &ctx,
+            max_retries,
+            &mut join_set,
+        );
+    }
+
+    // 6. Wait for tasks in completion order — progress bar updates immediately
     let mut success = 0u64;
     let mut failed = 0u64;
-    for handle in handles {
-        match handle.await {
+    while let Some(result) = join_set.join_next().await {
+        match result {
             Ok(Ok(())) => success += 1,
             Ok(Err(e)) => {
                 warn!(error = %e, "task returned error");
@@ -248,8 +259,12 @@ pub async fn run_crawl(config: &Config, state: &Arc<StateManager>) -> Result<()>
                 failed += 1;
             }
         }
+        tasks_span.pb_inc(1);
     }
 
+    tasks_span.pb_set_finish_message(&format!("done ✓{} ✗{}", success, failed));
+    drop(_tasks_guard);
+    drop(tasks_span);
     info!(success, failed, "all tasks completed");
 
     // 7. Collect stats
@@ -283,8 +298,6 @@ pub async fn run_crawl(config: &Config, state: &Arc<StateManager>) -> Result<()>
 // RAII worker guard — guarantees worker is returned to pool on any exit path
 // ---------------------------------------------------------------------------
 
-/// Owns a `Worker` borrowed from the pool. On `Drop` (normal exit, panic, or
-/// task abort), the worker is automatically pushed back.
 struct WorkerGuard {
     worker: Option<Worker>,
     pool: Arc<StdMutex<VecDeque<Worker>>>,
@@ -295,7 +308,6 @@ impl WorkerGuard {
         self.worker.as_mut().unwrap()
     }
 
-    /// Explicitly return the worker to the pool and consume the guard.
     fn return_worker(mut self) {
         if let Some(w) = self.worker.take() {
             self.pool.lock().unwrap().push_back(w);
@@ -315,7 +327,8 @@ impl Drop for WorkerGuard {
 // Task runner (with internal retry loop)
 // ---------------------------------------------------------------------------
 
-fn spawn_task(
+#[allow(clippy::too_many_arguments)]
+fn spawn_task_into(
     task: Task,
     pool: &Arc<StdMutex<VecDeque<Worker>>>,
     semaphore: &Arc<Semaphore>,
@@ -323,35 +336,41 @@ fn spawn_task(
     writer: &Arc<NdjsonWriter>,
     ctx: &Arc<SnapshotContext>,
     max_retries: u32,
-) -> tokio::task::JoinHandle<Result<()>> {
+    join_set: &mut JoinSet<Result<()>>,
+) {
     let pool = pool.clone();
     let semaphore = semaphore.clone();
     let state = state.clone();
     let writer = writer.clone();
     let ctx = ctx.clone();
 
-    tokio::spawn(async move {
+    let bvid = task.bvid().to_string();
+    let task_name = task.task_type_name();
+    let span = info_span!("task", bvid = %bvid, task = task_name);
+
+    join_set.spawn(async move {
+        let _guard = span.enter();
         let mut fail_count = 0u32;
         let mut rate_limit_count = 0u32;
-        let bvid = task.bvid().to_string();
-        let task_name = task.task_type_name();
 
         loop {
-            // Acquire concurrency permit
-            let permit = semaphore.acquire().await.map_err(|e| CrawlerError::Permanent(format!("semaphore closed: {e}")))?;
+            let permit = semaphore.acquire().await.map_err(|e| {
+                CrawlerError::Permanent(format!("semaphore closed: {e}"))
+            })?;
 
-            // Pop a worker and wrap in RAII guard — guaranteed to return even on panic/abort
             let worker = pool.lock().unwrap().pop_front().expect("worker pool empty");
-            let mut guard = WorkerGuard { worker: Some(worker), pool: pool.clone() };
+            let mut guard = WorkerGuard {
+                worker: Some(worker),
+                pool: pool.clone(),
+            };
 
-            // Random delay — if this worker was recently rate-limited, it sleeps here
             guard.worker_mut().rate_limiter.delay().await;
 
-            info!(worker = guard.worker_mut().id, bvid = %bvid, task = task_name, "executing task");
+            info!(worker = guard.worker_mut().id, "executing");
 
-            let result = execute_task(guard.worker_mut(), &task, &state, &writer, &ctx).await;
+            let result =
+                execute_task(guard.worker_mut(), &task, &state, &writer, &ctx).await;
 
-            // Update worker state BEFORE returning it to the pool
             let worker = guard.worker_mut();
             match &result {
                 Ok(()) => worker.record_success(),
@@ -362,45 +381,42 @@ fn spawn_task(
                 Err(_) => worker.record_failure(),
             }
 
-            // Return worker to pool and release permit
             guard.return_worker();
             drop(permit);
 
             match result {
                 Ok(()) => {
-                    info!(bvid = %bvid, task = task_name, "task done");
+                    info!("done");
                     return Ok(());
                 }
                 Err(CrawlerError::RateLimited { retry_after }) => {
                     rate_limit_count += 1;
                     if rate_limit_count >= max_retries {
-                        // Don't mark done — next crawl run should retry this task
-                        error!(bvid = %bvid, count = rate_limit_count, "rate limit exceeded max retries, will retry next run");
+                        warn!(count = rate_limit_count, "rate limit exceeded max retries, will retry next run");
                         return Ok(());
                     }
                     let cooldown = retry_after.unwrap_or(60);
-                    warn!(bvid = %bvid, task = task_name, cooldown = cooldown, count = rate_limit_count, "rate limited, retrying");
+                    warn!(cooldown = cooldown, count = rate_limit_count, "rate limited, retrying");
                     tokio::time::sleep(Duration::from_secs(cooldown)).await;
                 }
                 Err(CrawlerError::Permanent(msg)) => {
-                    warn!(bvid = %bvid, task = task_name, reason = %msg, "permanent failure, skipping");
+                    warn!(reason = %msg, "permanent failure, skipping");
                     mark_task_done(&task, &state);
                     return Ok(());
                 }
                 Err(e) => {
                     fail_count += 1;
                     if fail_count >= max_retries {
-                        // Don't mark done — next crawl run should retry this task
-                        error!(bvid = %bvid, error = %e, fail_count = fail_count, "task failed permanently, will retry next run");
+                        error!(error = %e, fail_count = fail_count, "task failed permanently, will retry next run");
                         return Ok(());
                     }
-                    warn!(bvid = %bvid, error = %e, fail_count = fail_count, "retrying task");
+                    warn!(error = %e, fail_count = fail_count, "retrying task");
                     let delay = rand::random::<u64>() % 2000;
                     tokio::time::sleep(Duration::from_millis(delay)).await;
                 }
             }
         }
-    })
+    });
 }
 
 // ---------------------------------------------------------------------------
@@ -419,7 +435,12 @@ async fn execute_task(
 
     match task {
         Task::VideoDetail { bvid, ranked } => {
-            let detail = video::fetch_video_detail(&worker.client, &cookie, base_url, bvid).await?;
+            let mut detail =
+                video::fetch_video_detail(&worker.client, &cookie, base_url, bvid).await?;
+            match video::fetch_tags(&worker.client, &cookie, base_url, bvid).await {
+                Ok(tags) if !tags.is_empty() => detail.tags = tags,
+                _ => {}
+            }
             state.mark_detail_done(bvid)?;
 
             let merged = build_video_detail(ranked, &detail, ctx);
@@ -430,15 +451,13 @@ async fn execute_task(
                 &[merged],
             )?;
 
-            // Sub-tasks (UP info, comments, danmaku) are spawned as independent
-            // tasks by run_crawl — no inline fetching here to avoid race conditions.
-
             Ok(())
         }
 
         Task::UpInfo { up_id, bvid: _ } => {
             let up_info =
-                up::fetch_up_info(&worker.client, &cookie, base_url, worker.wbi(), up_id).await?;
+                up::fetch_up_info(&worker.client, &cookie, base_url, worker.wbi(), up_id)
+                    .await?;
             writer.write_ndjson(
                 &ctx.snapshot_dir
                     .join("up_info")
@@ -525,7 +544,6 @@ async fn execute_task(
 // Helpers
 // ---------------------------------------------------------------------------
 
-/// Mark the appropriate state flag for a task so it won't be regenerated.
 fn mark_task_done(task: &Task, state: &Arc<StateManager>) {
     let result = match task {
         Task::VideoDetail { bvid, .. } => state.mark_detail_done(bvid),
@@ -547,8 +565,11 @@ fn count_files_in_dir(dir: &std::path::Path) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::VecDeque;
+    use std::sync::{Arc, Mutex as StdMutex};
+    use std::time::Duration;
+    use tokio::sync::Semaphore;
 
-    /// Semaphore + per-task spawn: tasks execute concurrently, limited by semaphore.
     #[tokio::test]
     async fn test_semaphore_limits_concurrency() {
         let semaphore = Arc::new(Semaphore::new(2));
@@ -574,7 +595,6 @@ mod tests {
         assert!(max_active.load(std::sync::atomic::Ordering::SeqCst) <= 2);
     }
 
-    /// Worker pool: tasks can pop and push workers without deadlock.
     #[tokio::test]
     async fn test_worker_pool_pop_push() {
         let pool = Arc::new(StdMutex::new(VecDeque::from(vec![1, 2, 3])));
@@ -597,8 +617,6 @@ mod tests {
         }
         let pool = pool.lock().unwrap();
         assert_eq!(pool.len(), 3);
-        // Each worker starts at 1/2/3, used twice (6 tasks / 3 workers), each w += 10
-        // Final: 1+20=21, 2+20=22, 3+20=23 → sum = 66
         assert_eq!(pool.iter().sum::<i32>(), 21 + 22 + 23);
     }
 }

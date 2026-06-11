@@ -194,6 +194,28 @@ async fn test_fetch_video_detail() {
     println!("  desc: {}", desc_preview);
 }
 
+#[tokio::test]
+#[ignore]
+async fn test_fetch_tags() {
+    let env = setup()
+        .await
+        .expect("set SESSDATA/BILI_JCT/DEDE_USER_ID in .env");
+
+    let ranked = ranking::fetch_all_rankings(&env.client, &env.cookie, BASE_URL, &env.wbi, 1500)
+        .await
+        .expect("fetch rankings");
+
+    let bvid = &ranked[0].bvid;
+    delay_ms(2000);
+
+    let tags = video::fetch_tags(&env.client, &env.cookie, BASE_URL, bvid)
+        .await
+        .expect("fetch tags should succeed");
+
+    println!("tags for {}: {}", bvid, tags);
+    assert!(!tags.is_empty(), "top ranked video should have tags");
+}
+
 // ---------------------------------------------------------------------------
 // UP Info
 // ---------------------------------------------------------------------------

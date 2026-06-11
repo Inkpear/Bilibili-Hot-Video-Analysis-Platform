@@ -324,7 +324,9 @@ impl StateManager {
     pub fn video_done(&self, bvid: &str) -> Result<bool> {
         let conn = self.conn.lock().unwrap();
         let done: bool = conn.query_row(
-            "SELECT (has_detail = 1 AND has_comments = 1 AND has_danmaku = 1) FROM collected_videos WHERE bvid = ?1",
+            "SELECT (v.has_detail = 1 AND v.has_comments = 1 AND v.has_danmaku = 1
+                     AND EXISTS (SELECT 1 FROM collected_ups u WHERE u.up_id = v.up_id))
+             FROM collected_videos v WHERE v.bvid = ?1",
             params![bvid],
             |row| row.get(0),
         )?;
@@ -366,13 +368,19 @@ impl StateManager {
         })
     }
 
-    /// Reset only incomplete flags (not already-done ones). Safe to call after crashes.
+    /// Reset in-flight sub-task flags after a crash.
+    ///
+    /// Only resets comments/danmaku for videos where `has_detail = 0` (detail was
+    /// never completed, so comments/danmaku data is unreliable). Videos with detail
+    /// already done keep their comments/danmaku flags — the data files are valid
+    /// and the task loop's dedup handles re-fetched entries.
+    ///
+    /// UP info is tracked in `collected_ups` and unaffected by this reset.
     pub fn reset_incomplete_flags(&self) -> Result<()> {
         let conn = self.conn.lock().unwrap();
-        // Only reset flags for videos that were not fully collected
         conn.execute(
             "UPDATE collected_videos SET has_comments = 0, has_danmaku = 0
-             WHERE has_detail = 0 OR has_comments = 0 OR has_danmaku = 0",
+             WHERE has_detail = 0",
             [],
         )?;
         Ok(())
@@ -581,6 +589,9 @@ mod tests {
         sm.mark_detail_done("BV1xx").unwrap();
         sm.mark_comments_done("BV1xx").unwrap();
         sm.mark_danmaku_done("BV1xx").unwrap();
+        // Still not done — UP not collected
+        assert!(!sm.video_done("BV1xx").unwrap());
+        sm.mark_up_collected("UP1").unwrap();
         assert!(sm.video_done("BV1xx").unwrap());
     }
 
@@ -607,25 +618,76 @@ mod tests {
     #[test]
     fn test_reset_incomplete_flags() {
         let sm = mem_state();
-        sm.insert_video("BV1", "", "", "", 1, 1, 0, 0, "", "")
+        sm.insert_video("BV1", "", "", "", 1, 1, 0, 0, "UP1", "")
             .unwrap();
-        sm.insert_video("BV2", "", "", "", 2, 2, 0, 0, "", "")
+        sm.insert_video("BV2", "", "", "", 2, 2, 0, 0, "UP2", "")
             .unwrap();
+        sm.insert_video("BV3", "", "", "", 3, 3, 0, 0, "UP3", "")
+            .unwrap();
+
+        // BV1: detail+comments+danmaku done
         sm.mark_detail_done("BV1").unwrap();
         sm.mark_comments_done("BV1").unwrap();
         sm.mark_danmaku_done("BV1").unwrap();
 
+        // BV2: detail done, comments done, danmaku NOT done
+        sm.mark_detail_done("BV2").unwrap();
+        sm.mark_comments_done("BV2").unwrap();
+
+        // BV3: nothing done
+
         sm.reset_incomplete_flags().unwrap();
 
-        // BV1 was fully done — flags should be preserved
+        // BV1: detail done → comments/danmaku preserved
         let row1 = sm.get_video_info("BV1").unwrap().unwrap();
         assert!(row1.has_comments);
         assert!(row1.has_danmaku);
 
-        // BV2 was incomplete — flags should be reset
+        // BV2: detail done → comments preserved, danmaku stays 0
         let row2 = sm.get_video_info("BV2").unwrap().unwrap();
-        assert!(!row2.has_comments);
+        assert!(row2.has_comments);
         assert!(!row2.has_danmaku);
+
+        // BV3: detail not done → flags stay 0 (reset is no-op for already-0)
+        let row3 = sm.get_video_info("BV3").unwrap().unwrap();
+        assert!(!row3.has_comments);
+        assert!(!row3.has_danmaku);
+    }
+
+    #[test]
+    fn test_video_done_requires_up() {
+        let sm = mem_state();
+        sm.insert_video("BV1", "T", "", "", 1, 1, 0, 0, "UP1", "")
+            .unwrap();
+
+        // All sub-tasks done but UP not collected
+        sm.mark_detail_done("BV1").unwrap();
+        sm.mark_comments_done("BV1").unwrap();
+        sm.mark_danmaku_done("BV1").unwrap();
+        assert!(!sm.video_done("BV1").unwrap());
+
+        // After UP collected, video is done
+        sm.mark_up_collected("UP1").unwrap();
+        assert!(sm.video_done("BV1").unwrap());
+
+        // On restart, video stays done — UP task won't be generated
+        sm.reset_incomplete_flags().unwrap();
+        assert!(sm.video_done("BV1").unwrap());
+    }
+
+    #[test]
+    fn test_video_done_up_already_collected_for_another_video() {
+        let sm = mem_state();
+        // UP1 was collected via another video
+        sm.mark_up_collected("UP1").unwrap();
+
+        sm.insert_video("BV1", "T", "", "", 1, 1, 0, 0, "UP1", "")
+            .unwrap();
+        sm.mark_detail_done("BV1").unwrap();
+        sm.mark_comments_done("BV1").unwrap();
+        sm.mark_danmaku_done("BV1").unwrap();
+        // UP already collected → video done immediately
+        assert!(sm.video_done("BV1").unwrap());
     }
 
     #[test]

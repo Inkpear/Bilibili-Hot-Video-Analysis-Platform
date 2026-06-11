@@ -2,7 +2,8 @@ use std::collections::{HashMap, HashSet};
 
 use serde::Deserialize;
 use tokio::time::{sleep, Duration};
-use tracing::info;
+use tracing::{info, Span};
+use tracing_indicatif::span_ext::IndicatifSpanExt;
 
 use crate::error::{CrawlerError, Result};
 use crate::wbi::WbiSigner;
@@ -214,6 +215,8 @@ pub async fn fetch_all_rankings(
             unique_so_far = seen_bvids.len(),
             "partition fetched"
         );
+
+        Span::current().pb_inc(1);
 
         if idx + 1 < PARTITION_RIDS.len() {
             sleep(Duration::from_millis(delay_ms)).await;

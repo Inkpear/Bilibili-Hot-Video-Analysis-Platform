@@ -52,6 +52,12 @@ fn test_full_video_lifecycle() {
     state.mark_comments_done(bvid).expect("mark comments");
     state.mark_danmaku_done(bvid).expect("mark danmaku");
 
+    // Not done yet — UP not collected
+    assert!(!state.video_done(bvid).expect("video_done"));
+
+    // Mark UP collected
+    state.mark_up_collected("999").expect("mark up");
+
     // Now done
     assert!(state.video_done(bvid).expect("video_done"));
 

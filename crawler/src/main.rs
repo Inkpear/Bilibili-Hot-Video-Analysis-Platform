@@ -2,7 +2,12 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use chrono::{Datelike, Timelike};
+use indicatif::ProgressStyle;
 use tracing::{error, info};
+use tracing_indicatif::IndicatifLayer;
+use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::util::SubscriberInitExt;
+use tracing_subscriber::EnvFilter;
 
 use bilibili_crawler::config::Config;
 use bilibili_crawler::error::Result;
@@ -11,7 +16,26 @@ use bilibili_crawler::state::StateManager;
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    tracing_subscriber::fmt::init();
+    let indicatif_layer = IndicatifLayer::new().with_max_progress_bars(
+        12,
+        Some(
+            ProgressStyle::with_template("  ...and {pending_progress_bars} more not shown")
+                .unwrap(),
+        ),
+    );
+
+    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| {
+        EnvFilter::new("bilibili_crawler=info,hyper_util=warn,reqwest=warn")
+    });
+
+    tracing_subscriber::registry()
+        .with(filter)
+        .with(
+            tracing_subscriber::fmt::layer()
+                .with_writer(indicatif_layer.get_stderr_writer()),
+        )
+        .with(indicatif_layer)
+        .init();
 
     let run_now = std::env::args().any(|a| a == "--now");
 

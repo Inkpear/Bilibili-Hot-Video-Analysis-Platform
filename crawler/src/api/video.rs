@@ -49,6 +49,50 @@ struct TagItem {
     tag_name: String,
 }
 
+#[derive(Debug, Deserialize)]
+struct TagResponse {
+    code: i32,
+    data: Option<Vec<TagItem>>,
+}
+
+/// Fetch tags for a video from `/x/tag/archive/tags`.
+pub async fn fetch_tags(
+    client: &reqwest::Client,
+    cookie: &str,
+    base_url: &str,
+    bvid: &str,
+) -> Result<String> {
+    let url = format!("{}/x/tag/archive/tags?bvid={}", base_url, bvid);
+
+    let response = client
+        .get(&url)
+        .header("Cookie", cookie)
+        .header("Referer", "https://www.bilibili.com")
+        .send()
+        .await?;
+
+    if response.status() == reqwest::StatusCode::TOO_MANY_REQUESTS {
+        return Err(CrawlerError::RateLimited {
+            retry_after: Some(60),
+        });
+    }
+
+    let resp: TagResponse = response.json().await?;
+    if resp.code != 0 {
+        return Ok(String::new());
+    }
+
+    let tags = resp
+        .data
+        .unwrap_or_default()
+        .iter()
+        .map(|t| t.tag_name.clone())
+        .collect::<Vec<_>>()
+        .join(",");
+
+    Ok(tags)
+}
+
 /// Fetch video detail from `/x/web-interface/view`.
 ///
 /// Returns `Err` on non-zero API code or network failure.
@@ -169,5 +213,33 @@ mod tests {
         assert_eq!(resp.code, 0);
         let data = resp.data.unwrap();
         assert_eq!(data.tags.as_ref().unwrap().len(), 2);
+    }
+
+    #[test]
+    fn test_deserialize_tag_response() {
+        let body = serde_json::json!({
+            "code": 0,
+            "data": [
+                {"tag_name": "科技"},
+                {"tag_name": "教程"},
+                {"tag_name": "编程"}
+            ]
+        });
+        let resp: TagResponse = serde_json::from_value(body).unwrap();
+        assert_eq!(resp.code, 0);
+        let tags = resp.data.unwrap();
+        assert_eq!(tags.len(), 3);
+        assert_eq!(tags[0].tag_name, "科技");
+    }
+
+    #[test]
+    fn test_deserialize_tag_response_empty() {
+        let body = serde_json::json!({
+            "code": 0,
+            "data": []
+        });
+        let resp: TagResponse = serde_json::from_value(body).unwrap();
+        assert_eq!(resp.code, 0);
+        assert!(resp.data.unwrap().is_empty());
     }
 }
