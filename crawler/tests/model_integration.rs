@@ -1,4 +1,4 @@
-use bilibili_crawler::models::{VideoDetail, Comment, Danmaku, UpInfo};
+use bilibili_crawler::models::{Comment, Danmaku, UpInfo, VideoDetail};
 use serde_json;
 
 #[test]

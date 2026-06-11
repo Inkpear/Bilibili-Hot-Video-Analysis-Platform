@@ -22,15 +22,24 @@ fn test_ndjson_roundtrip() {
 
     // Write
     let items = vec![
-        TestItem { id: 1, name: "one".into() },
-        TestItem { id: 2, name: "two".into() },
+        TestItem {
+            id: 1,
+            name: "one".into(),
+        },
+        TestItem {
+            id: 2,
+            name: "two".into(),
+        },
     ];
     let path = snap_dir.join("test.ndjson");
     writer.write_ndjson(&path, &items).expect("write");
 
     // Read back
     let mut content = String::new();
-    fs::File::open(&path).expect("open").read_to_string(&mut content).expect("read");
+    fs::File::open(&path)
+        .expect("open")
+        .read_to_string(&mut content)
+        .expect("read");
     let lines: Vec<TestItem> = content
         .lines()
         .filter(|l| !l.is_empty())
@@ -39,11 +48,17 @@ fn test_ndjson_roundtrip() {
     assert_eq!(lines, items);
 
     // Append
-    let more = vec![TestItem { id: 3, name: "three".into() }];
+    let more = vec![TestItem {
+        id: 3,
+        name: "three".into(),
+    }];
     writer.append_ndjson(&path, &more).expect("append");
 
     let mut content2 = String::new();
-    fs::File::open(&path).expect("open").read_to_string(&mut content2).expect("read");
+    fs::File::open(&path)
+        .expect("open")
+        .read_to_string(&mut content2)
+        .expect("read");
     let lines2: Vec<TestItem> = content2
         .lines()
         .filter(|l| !l.is_empty())
@@ -64,9 +79,9 @@ fn test_snapshot_dir_naming() {
     let snap_dir = writer.create_snapshot_dir().expect("create");
 
     let dir_name = snap_dir.file_name().unwrap().to_string_lossy();
-    // Format: YYYYMMDD_HHMM
-    assert_eq!(dir_name.len(), 13, "dir name should be YYYYMMDD_HHMM (13 chars)");
-    assert!(dir_name.contains('_'), "should contain underscore separator");
+    // Format: YYYYMMDD
+    assert_eq!(dir_name.len(), 8, "dir name should be YYYYMMDD (8 chars)");
+    assert!(!dir_name.contains('_'), "daily format has no underscore");
 
     let _ = fs::remove_dir_all(&tmp);
 }

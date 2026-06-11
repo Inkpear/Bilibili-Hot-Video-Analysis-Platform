@@ -1,15 +1,16 @@
 [Unit]
 Description=Bilibili Backend API
-After=network.target mysql.service
+After=network-online.target
+Wants=network-online.target
 
 [Service]
 Type=simple
-User=inkpear
-WorkingDirectory=/home/inkpear/backend
-ExecStart=/home/inkpear/backend/target/release/bilibili-backend
+Environment=DATABASE_URL=mysql://root:root@127.0.0.1:3306/bilibili
+ExecStart=/home/inkpear/backend/target/release/bilibili-hot-backend
 Restart=always
-RestartSec=10
-Environment=DATABASE_URL=mysql://root:password@localhost/bilibili
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
 
 [Install]
 WantedBy=default.target

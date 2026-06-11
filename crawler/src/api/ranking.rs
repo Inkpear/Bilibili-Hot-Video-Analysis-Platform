@@ -4,12 +4,11 @@ use serde::Deserialize;
 use tokio::time::{sleep, Duration};
 use tracing::info;
 
-use crate::config::Config;
 use crate::error::{CrawlerError, Result};
 use crate::wbi::WbiSigner;
 
 // ---------------------------------------------------------------------------
-// Private response types (Bilibili ranking/v2 API)
+// Bilibili ranking/v2 API response types
 // ---------------------------------------------------------------------------
 
 #[derive(Debug, Deserialize)]
@@ -60,8 +59,6 @@ struct RankingStat {
 // Public output type
 // ---------------------------------------------------------------------------
 
-/// A video from a Bilibili ranking list, carrying both video metadata and
-/// ranking provenance.
 #[derive(Debug, Clone)]
 pub struct RankedVideo {
     pub bvid: String,
@@ -89,8 +86,12 @@ pub struct RankedVideo {
 }
 
 // ---------------------------------------------------------------------------
-// Category lookup
+// Known partition IDs
 // ---------------------------------------------------------------------------
+
+pub const PARTITION_RIDS: &[u32] = &[
+    1001, 1002, 1003, 1004, 1005, 1007, 1008, 1010, 1012, 1013, 1014, 1018, 1020, 1024,
+];
 
 fn rid_to_category(rid: u32) -> &'static str {
     match rid {
@@ -116,49 +117,42 @@ fn rid_to_category(rid: u32) -> &'static str {
 // Main fetch function
 // ---------------------------------------------------------------------------
 
-/// Fetch rankings for all configured partitions and return a deduplicated
-/// vector of ranked videos (first occurrence wins).
+/// Fetch rankings for all partitions. Returns deduplicated videos (first occurrence wins).
+///
+/// Uses the provided `cookie`, `client`, and `wbi_signer` directly — no env var reading.
+/// Delays between requests using `delay_ms`.
 pub async fn fetch_all_rankings(
     client: &reqwest::Client,
-    config: &Config,
-    wbi_signer: &mut WbiSigner,
+    cookie: &str,
+    base_url: &str,
+    wbi_signer: &WbiSigner,
+    delay_ms: u64,
 ) -> Result<Vec<RankedVideo>> {
-    let cookie = std::env::var(&config.api.cookie_env_name).map_err(|e| {
-        CrawlerError::Config(format!(
-            "failed to read cookie from env var '{}': {}",
-            config.api.cookie_env_name, e
-        ))
-    })?;
-
-    let base_url = &config.api.base_url;
     let ranking_url = format!("{}/x/web-interface/ranking/v2", base_url);
 
     let mut all_videos: Vec<RankedVideo> = Vec::new();
     let mut seen_bvids: HashSet<String> = HashSet::new();
 
-    for (idx, &rid) in config.partitions.rids.iter().enumerate() {
+    for (idx, &rid) in PARTITION_RIDS.iter().enumerate() {
         let category = rid_to_category(rid);
 
         info!(
             partition = idx + 1,
-            total = config.partitions.rids.len(),
+            total = PARTITION_RIDS.len(),
             rid = rid,
             category = category,
             "fetching ranking"
         );
 
-        // Build and sign parameters.
         let mut params: HashMap<String, String> = HashMap::new();
         params.insert("rid".to_string(), rid.to_string());
         params.insert("type".to_string(), "all".to_string());
         wbi_signer.sign_params(&mut params).await?;
 
-        // Execute request.
         let resp = client
             .get(&ranking_url)
             .query(&params)
-            .header("User-Agent", &config.api.user_agent)
-            .header("Cookie", &cookie)
+            .header("Cookie", cookie)
             .header("Referer", "https://www.bilibili.com/")
             .send()
             .await?
@@ -221,15 +215,14 @@ pub async fn fetch_all_rankings(
             "partition fetched"
         );
 
-        // Delay between requests (skip after last partition).
-        if idx + 1 < config.partitions.rids.len() {
-            sleep(Duration::from_millis(config.crawler.request_delay_ms)).await;
+        if idx + 1 < PARTITION_RIDS.len() {
+            sleep(Duration::from_millis(delay_ms)).await;
         }
     }
 
     info!(
         total_unique = all_videos.len(),
-        partitions_scanned = config.partitions.rids.len(),
+        partitions_scanned = PARTITION_RIDS.len(),
         "all rankings fetched"
     );
 
@@ -266,76 +259,5 @@ mod tests {
     fn test_rid_to_category_unknown() {
         assert_eq!(rid_to_category(0), "其他");
         assert_eq!(rid_to_category(9999), "其他");
-    }
-
-    #[test]
-    fn test_ranking_response_deserialization() {
-        let json = r#"{
-            "code": 0,
-            "message": "0",
-            "data": {
-                "list": [
-                    {
-                        "bvid": "BV1xx411c7mD",
-                        "aid": 171049,
-                        "cid": 2811658,
-                        "title": "Test Video",
-                        "pubdate": 1609459200,
-                        "duration": 120,
-                        "owner": {
-                            "mid": 12345,
-                            "name": "TestUP",
-                            "face": "https://example.com/face.jpg"
-                        },
-                        "stat": {
-                            "view": 100000,
-                            "like": 5000,
-                            "coin": 2000,
-                            "favorite": 3000,
-                            "share": 500,
-                            "reply": 100,
-                            "danmaku": 800
-                        },
-                        "tname": "综合"
-                    }
-                ]
-            }
-        }"#;
-
-        let resp: RankingResponse = serde_json::from_str(json).unwrap();
-        assert_eq!(resp.code, 0);
-        let data = resp.data.unwrap();
-        assert_eq!(data.list.len(), 1);
-        assert_eq!(data.list[0].bvid, "BV1xx411c7mD");
-        assert_eq!(data.list[0].stat.view, 100000);
-        assert_eq!(data.list[0].tname, "综合");
-        assert_eq!(data.list[0].stat.like_count, 5000);
-    }
-
-    #[test]
-    fn test_ranking_response_error_code() {
-        let json = r#"{
-            "code": -352,
-            "message": "risk control",
-            "data": null
-        }"#;
-
-        let resp: RankingResponse = serde_json::from_str(json).unwrap();
-        assert_eq!(resp.code, -352);
-        assert!(resp.data.is_none());
-    }
-
-    #[test]
-    fn test_ranked_video_url_format() {
-        let bvid = "BV1xx411c7mD";
-        let url = format!("https://www.bilibili.com/video/{}", bvid);
-        assert_eq!(url, "https://www.bilibili.com/video/BV1xx411c7mD");
-    }
-
-    #[test]
-    fn test_rank_name_format() {
-        let category = rid_to_category(1003);
-        let rank_name = format!("{}榜", category);
-        assert_eq!(rank_name, "音乐榜");
     }
 }

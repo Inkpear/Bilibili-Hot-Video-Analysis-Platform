@@ -1,5 +1,4 @@
-pub mod full;
-pub mod incremental;
+pub mod crawl;
+pub mod queue;
 
-pub use full::run_full_crawl;
-pub use incremental::run_incremental_crawl;
+pub use crawl::run_crawl;

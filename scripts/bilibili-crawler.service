@@ -1,14 +1,17 @@
 [Unit]
 Description=Bilibili Hot Video Crawler
-After=network.target
+After=network-online.target
+Wants=network-online.target
 
 [Service]
 Type=simple
-User=inkpear
-WorkingDirectory=/home/inkpear/crawler
-ExecStart=/home/inkpear/crawler/target/release/bilibili-crawler
+Environment=BILI_COOKIE=%i
+ExecStart=/home/inkpear/crawler-v2/target/release/bilibili-crawler
+WorkingDirectory=/home/inkpear/crawler-v2
 Restart=always
 RestartSec=10
+StandardOutput=journal
+StandardError=journal
 
 [Install]
 WantedBy=default.target

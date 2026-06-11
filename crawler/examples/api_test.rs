@@ -2,15 +2,14 @@
 //
 // Usage: BILI_COOKIE="SESSDATA=..." cargo run --example api_test
 
+use md5::{Digest, Md5};
 use std::collections::HashMap;
 use std::env;
-use md5::{Md5, Digest};
 
 const MIXIN_KEY_ENC_TAB: [usize; 64] = [
-    46, 47, 18, 2, 53, 8, 23, 32, 15, 50, 10, 31, 58, 3, 45, 35, 27, 43, 5, 49,
-    33, 9, 42, 19, 29, 28, 14, 39, 12, 38, 41, 13, 37, 48, 7, 16, 24, 55, 40, 61,
-    26, 17, 0, 1, 60, 51, 30, 4, 22, 25, 54, 21, 56, 59, 6, 63, 57, 62, 11, 36,
-    20, 34, 44, 52,
+    46, 47, 18, 2, 53, 8, 23, 32, 15, 50, 10, 31, 58, 3, 45, 35, 27, 43, 5, 49, 33, 9, 42, 19, 29,
+    28, 14, 39, 12, 38, 41, 13, 37, 48, 7, 16, 24, 55, 40, 61, 26, 17, 0, 1, 60, 51, 30, 4, 22, 25,
+    54, 21, 56, 59, 6, 63, 57, 62, 11, 36, 20, 34, 44, 52,
 ];
 
 fn get_mixin_key(orig: &str) -> String {
@@ -22,7 +21,13 @@ fn get_mixin_key(orig: &str) -> String {
 }
 
 fn extract_key_from_url(url: &str) -> String {
-    url.rsplit('/').next().unwrap().split('.').next().unwrap().to_string()
+    url.rsplit('/')
+        .next()
+        .unwrap()
+        .split('.')
+        .next()
+        .unwrap()
+        .to_string()
 }
 
 fn sign_params(params: &mut HashMap<String, String>, mixin_key: &str) {
@@ -76,7 +81,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let spi: serde_json::Value = client
         .get("https://api.bilibili.com/x/frontend/finger/spi")
         .header("Cookie", &cookie)
-        .send().await?.json().await?;
+        .send()
+        .await?
+        .json()
+        .await?;
     let b3 = spi["data"]["b_3"].as_str().unwrap_or("");
     println!("buvid3 = {}", &b3[..b3.len().min(30)]);
 
@@ -87,20 +95,27 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let nav: serde_json::Value = client
         .get("https://api.bilibili.com/x/web-interface/nav")
         .header("Cookie", &augmented_cookie)
-        .send().await?.json().await?;
+        .send()
+        .await?
+        .json()
+        .await?;
     let img_url = nav["data"]["wbi_img"]["img_url"].as_str().unwrap();
     let sub_url = nav["data"]["wbi_img"]["sub_url"].as_str().unwrap();
     let img_key = extract_key_from_url(img_url);
     let sub_key = extract_key_from_url(sub_url);
     let mixin_key = get_mixin_key(&format!("{}{}", img_key, sub_key));
-    println!("img_key={}, sub_key={}, mixin={}", img_key, sub_key, mixin_key);
+    println!(
+        "img_key={}, sub_key={}, mixin={}",
+        img_key, sub_key, mixin_key
+    );
 
     println!("\n=== Step 3: Call ranking API (no WBI) ===");
     let resp1 = client
         .get("https://api.bilibili.com/x/web-interface/ranking/v2?rid=1005&type=all")
         .header("Cookie", &augmented_cookie)
         .header("Referer", "https://www.bilibili.com")
-        .send().await?;
+        .send()
+        .await?;
     let text1 = resp1.text().await?;
     let code1: i32 = serde_json::from_str::<serde_json::Value>(&text1)
         .map(|v| v["code"].as_i64().unwrap_or(-999) as i32)
@@ -118,14 +133,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .query(&params)
         .header("Cookie", &augmented_cookie)
         .header("Referer", "https://www.bilibili.com")
-        .send().await?;
+        .send()
+        .await?;
     let text2 = resp2.text().await?;
     let v2: serde_json::Value = serde_json::from_str(&text2)?;
     let code2 = v2["code"].as_i64().unwrap_or(-999) as i32;
-    let count = v2["data"]["list"]
-        .as_array()
-        .map(|a| a.len())
-        .unwrap_or(0);
+    let count = v2["data"]["list"].as_array().map(|a| a.len()).unwrap_or(0);
     println!("With WBI: code={}, videos={}", code2, count);
 
     if code2 == 0 {

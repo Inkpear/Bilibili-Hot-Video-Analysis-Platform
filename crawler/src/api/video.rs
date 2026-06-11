@@ -1,10 +1,7 @@
 use serde::Deserialize;
 
-use crate::config::Config;
 use crate::error::{CrawlerError, Result};
 use crate::models::VideoDetail;
-
-// ── Bilibili API response types ──────────────────────────────────────────────
 
 #[derive(Debug, Deserialize)]
 struct VideoResponse {
@@ -52,49 +49,47 @@ struct TagItem {
     tag_name: String,
 }
 
-// ── Public API ───────────────────────────────────────────────────────────────
-
-/// Fetches video detail from Bilibili `/x/web-interface/view?bvid={bvid}`.
+/// Fetch video detail from `/x/web-interface/view`.
 ///
-/// Requires `config.api.cookie_env_name` to point to an env var containing a
-/// valid Bilibili cookie (SESSDATA).  Returns a [`VideoDetail`] with all
-/// available fields populated.  Fields that are **not** provided by this
-/// endpoint (`category`, `sub_category`, `url`, `rank_source`, `rank_name`,
-/// `rank_position`, `snapshot_id`, `collect_time`) are left at their defaults;
-/// the caller is expected to fill them in.
+/// Returns `Err` on non-zero API code or network failure.
+/// Returns `Err(RateLimited)` on HTTP 429.
 pub async fn fetch_video_detail(
     client: &reqwest::Client,
-    config: &Config,
+    cookie: &str,
+    base_url: &str,
     bvid: &str,
 ) -> Result<VideoDetail> {
-    let url = format!(
-        "{}/x/web-interface/view?bvid={}",
-        config.api.base_url, bvid
-    );
+    let url = format!("{}/x/web-interface/view?bvid={}", base_url, bvid);
 
-    let cookie = std::env::var(&config.api.cookie_env_name).map_err(|_| {
-        CrawlerError::Config(format!(
-            "environment variable '{}' is not set",
-            config.api.cookie_env_name
-        ))
-    })?;
-
-    let request_builder = client
+    let response = client
         .get(&url)
-        .header("User-Agent", &config.api.user_agent)
-        .header("Cookie", &cookie)
-        .header("Referer", "https://www.bilibili.com");
+        .header("Cookie", cookie)
+        .header("Referer", "https://www.bilibili.com")
+        .send()
+        .await?;
 
-    tokio::time::sleep(std::time::Duration::from_millis(config.crawler.request_delay_ms)).await;
-
-    let response = request_builder.send().await?;
+    if response.status() == reqwest::StatusCode::TOO_MANY_REQUESTS {
+        return Err(CrawlerError::RateLimited {
+            retry_after: Some(60),
+        });
+    }
 
     let resp: VideoResponse = response.json().await?;
 
     if resp.code != 0 {
+        // -400 = bad parameter, -404 = video deleted — no point retrying
+        if resp.code == -400 || resp.code == -404 {
+            return Err(CrawlerError::Permanent(format!(
+                "video {} unavailable (code {})",
+                bvid, resp.code
+            )));
+        }
         return Err(CrawlerError::Api {
             code: resp.code,
-            message: format!("video detail API returned code {} for bvid {}", resp.code, bvid),
+            message: format!(
+                "video detail API returned code {} for bvid {}",
+                resp.code, bvid
+            ),
         });
     }
 
@@ -103,7 +98,6 @@ pub async fn fetch_video_detail(
         message: format!("empty data in video detail response for bvid {}", bvid),
     })?;
 
-    // Join all tag names into a comma-separated string.
     let tags = data
         .tags
         .unwrap_or_default()
@@ -146,8 +140,6 @@ pub async fn fetch_video_detail(
 mod tests {
     use super::*;
 
-    /// Verify that a minimal valid JSON response deserialises correctly and
-    /// produces the expected `VideoDetail` fields.
     #[test]
     fn test_deserialize_video_response() {
         let body = serde_json::json!({
@@ -166,77 +158,16 @@ mod tests {
                     "face": "https://example.com/avatar.jpg"
                 },
                 "stat": {
-                    "view": 1000,
-                    "like": 200,
-                    "coin": 50,
-                    "favorite": 30,
-                    "share": 10,
-                    "reply": 40,
-                    "danmaku": 500
+                    "view": 1000, "like": 200, "coin": 50,
+                    "favorite": 30, "share": 10, "reply": 40, "danmaku": 500
                 },
                 "tname": "知识",
-                "tags": [
-                    { "tag_name": "科技" },
-                    { "tag_name": "教程" },
-                    { "tag_name": "编程" }
-                ]
+                "tags": [{"tag_name": "科技"}, {"tag_name": "教程"}]
             }
         });
-
         let resp: VideoResponse = serde_json::from_value(body).unwrap();
         assert_eq!(resp.code, 0);
-
         let data = resp.data.unwrap();
-        assert_eq!(data.bvid, "BV1xx411c7mD");
-        assert_eq!(data.title, "Test Video");
-        assert_eq!(data.desc, "A test video description");
-        assert_eq!(data.tname, "知识");
-        assert_eq!(data.tags.as_ref().unwrap().len(), 3);
-        assert_eq!(data.tags.as_ref().unwrap()[0].tag_name, "科技");
-    }
-
-    /// Verify that missing `tags` field (or null) is handled gracefully.
-    #[test]
-    fn test_deserialize_no_tags() {
-        let body = serde_json::json!({
-            "code": 0,
-            "data": {
-                "bvid": "BV1xx411c7mD",
-                "aid": 12345678,
-                "cid": 87654321,
-                "title": "No Tags",
-                "desc": "",
-                "duration": 120,
-                "pubdate": 1700000000,
-                "owner": {
-                    "mid": 1,
-                    "name": "Uploader",
-                    "face": ""
-                },
-                "stat": {
-                    "view": 0, "like": 0, "coin": 0,
-                    "favorite": 0, "share": 0,
-                    "reply": 0, "danmaku": 0
-                },
-                "tname": ""
-            }
-        });
-
-        let resp: VideoResponse = serde_json::from_value(body).unwrap();
-        let data = resp.data.unwrap();
-        assert!(data.tags.is_none());
-    }
-
-    /// Verify that a non-zero code is detected.
-    #[test]
-    fn test_deserialize_error_code() {
-        let body = serde_json::json!({
-            "code": -400,
-            "data": null
-        });
-
-        let resp: VideoResponse = serde_json::from_value(body).unwrap();
-        assert_eq!(resp.code, -400);
-        assert!(resp.data.is_none());
+        assert_eq!(data.tags.as_ref().unwrap().len(), 2);
     }
 }

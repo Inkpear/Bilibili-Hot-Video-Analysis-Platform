@@ -1,26 +1,37 @@
 [crawler]
 trigger_hour = 0
 full_crawl_timeout_secs = 7200
-increment_interval_secs = 600
-increment_stop_hour = 21
 concurrency = 5
-max_retries = 3
-request_delay_ms = 2000
 output_dir = "~/output"
 db_path = "crawler_state.db"
 
+[crawler.delay]
+min_ms = 500
+max_ms = 2000
+
 [api]
 base_url = "https://api.bilibili.com"
-user_agent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36"
-cookie_env_name = "BILI_COOKIE"
 wbi_cache_ttl_secs = 14400
-
-[partitions]
-rids = [1001, 1002, 1003, 1004, 1005, 1007, 1008, 1010, 1012, 1013, 1014, 1018, 1020, 1024]
 
 [limits]
 max_comments_per_video = 200
 max_danmaku_per_video = 3000
-max_fail_count = 3
-danmaku_429_cooldown_secs = 60
-max_consecutive_danmaku_429 = 3
+max_retries_per_task = 10
+
+[[accounts]]
+sessdata = "b5461955%2C1796731989%2C83bf5%2A62"
+bili_jct = "d2d2bb01b3e280a808a00eb93111861e"
+dede_user_id = "625317796"
+proxy = ""
+
+[[accounts]]
+sessdata = "fa177cf1%2C1795738942%2Cbb054%2A52CjCGFxOC4A900rSqVG1-Tqub9A41nag9ZfL9MBWnhBUGu-DfXOryqHPP2b_3qQy1U_MSVjd4V0ZNRjdfMXZ0TWVBRzVMNHRfZWNNbHVhbWdYanpLM3hZaGQ2STFrYUZpWHZmejNaUDNpc1F5clVtcVl5cDhkVkJrTXFCRU1WNENzRE9HZHNaOGxBIIEC"
+bili_jct = "c85656f4a514d1cb378d64d44bff7359"
+dede_user_id = "3546969739888768"
+proxy = ""
+
+[[accounts]]
+sessdata = "27310f6d%2C1796742096%2C92fd7%2A61CjB3xTOK6ADJh4QCovAL9DRn4dCKblvJongmcYSUataXYgHzWLYsZpZ1gFMVRL6YYOoSVmFES3djMnZjTndHTEh4bXZmZmpaWFJ3SVREemR5cy1pOVFkdU1qVFNxdm1sdHBXOUxKdXJ3ek1YcVhEbjFQTXdTY1N4RFhXRmdoWEtQczE4UnMtd3V3IIEC"
+bili_jct = "5743520def54942bfc927f2412eb8c6e"
+dede_user_id = "3706940282636575"
+proxy = ""

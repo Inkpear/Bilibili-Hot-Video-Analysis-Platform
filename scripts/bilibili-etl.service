@@ -1,0 +1,11 @@
+[Unit]
+Description=Bilibili ETL Pipeline
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/home/inkpear/etl/run_etl.sh
+StandardOutput=journal
+StandardError=journal
+TimeoutStartSec=86400

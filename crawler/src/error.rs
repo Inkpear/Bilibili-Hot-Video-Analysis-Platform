@@ -26,8 +26,8 @@ pub enum CrawlerError {
     #[error("Rate limited, retry after {retry_after:?}")]
     RateLimited { retry_after: Option<u64> },
 
-    #[error("Max retries exceeded for video {bvid}")]
-    MaxRetries { bvid: String },
+    #[error("Permanent error (no retry): {0}")]
+    Permanent(String),
 
     #[error("Config error: {0}")]
     Config(String),
@@ -37,3 +37,13 @@ pub enum CrawlerError {
 }
 
 pub type Result<T> = std::result::Result<T, CrawlerError>;
+
+impl CrawlerError {
+    /// Returns true if this error is transient and the request can be retried.
+    pub fn is_retryable(&self) -> bool {
+        matches!(
+            self,
+            CrawlerError::Network(_) | CrawlerError::RateLimited { .. } | CrawlerError::Io(_)
+        )
+    }
+}

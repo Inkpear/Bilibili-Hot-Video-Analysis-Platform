@@ -1,9 +1,12 @@
-pub mod config;
 pub mod api;
+pub mod config;
 pub mod error;
+pub mod fingerprint;
 pub mod models;
 pub mod protos;
+pub mod rate_limit;
 pub mod scheduler;
 pub mod state;
 pub mod storage;
 pub mod wbi;
+pub mod worker;

@@ -1,77 +1,82 @@
 use std::sync::Arc;
 use std::time::Duration;
-use chrono::Timelike;
+
+use chrono::{Datelike, Timelike};
 use tracing::{error, info};
 
 use bilibili_crawler::config::Config;
 use bilibili_crawler::error::Result;
-use bilibili_crawler::scheduler::{run_full_crawl, run_incremental_crawl};
+use bilibili_crawler::scheduler::run_crawl;
 use bilibili_crawler::state::StateManager;
-use bilibili_crawler::wbi::WbiSigner;
 
 #[tokio::main]
 async fn main() -> Result<()> {
     tracing_subscriber::fmt::init();
 
+    let run_now = std::env::args().any(|a| a == "--now");
+
     let config = Config::load()?;
     info!(
         trigger_hour = config.crawler.trigger_hour,
-        stop_hour = config.crawler.increment_stop_hour,
+        accounts = config.accounts.len(),
         concurrency = config.crawler.concurrency,
-        "Starting Bilibili Crawler v2"
+        "Starting Bilibili Crawler v3"
     );
 
     let state = Arc::new(StateManager::new(&config.crawler.db_path)?);
-    let client = reqwest::Client::builder()
-        .user_agent(&config.api.user_agent)
-        .timeout(Duration::from_secs(30))
-        .build()?;
 
-    let cookie = std::env::var(&config.api.cookie_env_name).map_err(|_| {
-        bilibili_crawler::error::CrawlerError::Config(format!(
-            "env var '{}' not set",
-            config.api.cookie_env_name
-        ))
-    })?;
+    if run_now {
+        // Run once and exit
+        info!("--now flag: running crawl immediately");
+        match run_crawl(&config, &state).await {
+            Ok(()) => info!("Crawl completed"),
+            Err(e) => error!(error = %e, "Crawl failed"),
+        }
+        return Ok(());
+    }
 
-    let mut wbi_signer = WbiSigner::new(cookie, config.api.base_url.clone(), client.clone());
-
+    // Daemon mode: loop daily at trigger_hour
     loop {
         let now = chrono::Local::now();
-        let today = now.format("%Y%m%d").to_string();
         let current_hour = now.hour();
 
-        let needs_full = !state.has_full_crawl_today(&today)?;
-
-        if needs_full {
-            info!("=== Starting FULL crawl ===");
-            match run_full_crawl(&client, &config, &state, &mut wbi_signer).await {
-                Ok(()) => info!("=== FULL crawl completed ==="),
-                Err(e) => error!(error = %e, "FULL crawl failed"),
+        if current_hour == config.crawler.trigger_hour {
+            let today = format!("{:04}{:02}{:02}", now.year(), now.month(), now.day());
+            if state.has_full_crawl_today(&today).unwrap_or(false) {
+                info!(date = %today, "crawl already completed today, skipping");
+            } else {
+                info!("=== Starting crawl ===");
+                match run_crawl(&config, &state).await {
+                    Ok(()) => info!("=== Crawl completed ==="),
+                    Err(e) => error!(error = %e, "Crawl failed"),
+                }
             }
-        } else if current_hour < config.crawler.increment_stop_hour {
-            info!("=== Starting INCREMENTAL crawl ===");
-            match run_incremental_crawl(&client, &config, &state, &mut wbi_signer).await {
-                Ok(()) => info!("=== INCREMENTAL crawl completed ==="),
-                Err(e) => error!(error = %e, "INCREMENTAL crawl failed"),
-            }
-        } else {
-            info!(hour = current_hour, "Past stop hour, sleeping");
-        }
 
-        if needs_full {
             let tomorrow = now.date_naive() + chrono::Duration::days(1);
             let next_time = tomorrow
                 .and_hms_opt(config.crawler.trigger_hour, 0, 0)
                 .unwrap_or_default();
             let now_naive = now.naive_local();
             let duration = (next_time - now_naive).num_seconds().max(0) as u64;
-            info!(seconds = duration, "sleeping until next full crawl trigger");
+            info!(seconds = duration, "sleeping until next crawl trigger");
             tokio::time::sleep(Duration::from_secs(duration)).await;
         } else {
-            let sleep_secs = config.crawler.increment_interval_secs;
-            info!(seconds = sleep_secs, "sleeping until next incremental");
-            tokio::time::sleep(Duration::from_secs(sleep_secs)).await;
+            let next_time = now
+                .date_naive()
+                .and_hms_opt(config.crawler.trigger_hour, 0, 0)
+                .unwrap_or_default();
+            let now_naive = now.naive_local();
+            let duration = if next_time > now_naive {
+                (next_time - now_naive).num_seconds().max(0) as u64
+            } else {
+                let tomorrow = now.date_naive() + chrono::Duration::days(1);
+                let next_time = tomorrow
+                    .and_hms_opt(config.crawler.trigger_hour, 0, 0)
+                    .unwrap_or_default();
+                (next_time - now_naive).num_seconds().max(0) as u64
+            };
+            info!(seconds = duration, "sleeping until trigger hour");
+            tokio::time::sleep(Duration::from_secs(duration)).await;
         }
     }
 }
