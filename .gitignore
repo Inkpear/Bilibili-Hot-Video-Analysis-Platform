@@ -5,4 +5,7 @@ dist/
 .DS_Store
 .env
 *.db
+*-journal
 config.toml
+accounts.txt
+bilibili-API-collect/
