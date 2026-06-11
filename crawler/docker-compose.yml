@@ -1,0 +1,10 @@
+# 使用前: cp config.docker.toml.example config.docker.toml && 填入账号
+services:
+  crawler:
+    build: .
+    container_name: bilibili-crawler
+    restart: unless-stopped
+    volumes:
+      - ./config.docker.toml:/app/config.toml:ro
+      - ./data:/app/data
+      - ./output:/app/output

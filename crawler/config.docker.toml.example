@@ -1,0 +1,26 @@
+[crawler]
+trigger_hour = 0
+full_crawl_timeout_secs = 7200
+concurrency = 5
+output_dir = "/app/output"
+db_path = "/app/data/crawler_state.db"
+
+[crawler.delay]
+min_ms = 500
+max_ms = 2000
+
+[api]
+base_url = "https://api.bilibili.com"
+wbi_cache_ttl_secs = 14400
+
+[limits]
+max_comments_per_video = 200
+max_danmaku_per_video = 3000
+max_retries_per_task = 10
+
+# ---- 填入你的账号 ----
+[[accounts]]
+sessdata = ""
+bili_jct = ""
+dede_user_id = ""
+proxy = ""
