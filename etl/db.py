@@ -146,7 +146,7 @@ class Database:
         if not words:
             return
         sql = f"""
-        INSERT INTO {table} (bvid, word, snapshot_date, word_count, category)
+        INSERT INTO {table} (bvid, word, snapshot_date, word_count, sub_category)
         VALUES (%s, %s, %s, %s, %s)
         ON DUPLICATE KEY UPDATE word_count=VALUES(word_count)
         """
@@ -176,15 +176,15 @@ class Database:
             self.conn.rollback()
             logger.error("Failed to insert word trend batch: %s", e)
 
-    def insert_snapshot_date(self, snapshot_date: str, video_count: int):
+    def insert_snapshot_date(self, snapshot_date: str, video_count: int, comment_count: int, danmaku_count: int):
         sql = """
-        INSERT INTO snapshot_dates (snapshot_date, video_count)
-        VALUES (%s, %s)
-        ON DUPLICATE KEY UPDATE video_count=VALUES(video_count)
+        INSERT INTO snapshot_dates (snapshot_date, video_count, comment_count, danmaku_count)
+        VALUES (%s, %s, %s, %s)
+        ON DUPLICATE KEY UPDATE video_count=VALUES(video_count), comment_count=VALUES(comment_count), danmaku_count=VALUES(danmaku_count)
         """
         try:
             with self.conn.cursor() as cursor:
-                cursor.execute(sql, (snapshot_date, video_count))
+                cursor.execute(sql, (snapshot_date, video_count, comment_count, danmaku_count))
             self.conn.commit()
         except pymysql.Error as e:
             self.conn.rollback()

@@ -195,6 +195,6 @@ class DataProcessor:
             print(f"  word_trend: {len(trends)} entries")
 
         # 9. Snapshot date
-        self.db.insert_snapshot_date(self.date_str, len(videos))
+        self.db.insert_snapshot_date(self.date_str, len(videos), len(comments), len(danmaku_list))
         self.db.close()
         print("ETL completed!")
