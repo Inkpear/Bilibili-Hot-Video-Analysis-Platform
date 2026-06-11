@@ -146,7 +146,7 @@ class Database:
         if not words:
             return
         sql = f"""
-        INSERT INTO {table} (bvid, word, snapshot_date, word_count, sub_category)
+        INSERT INTO {table} (bvid, word, snapshot_date, word_count, category)
         VALUES (%s, %s, %s, %s, %s)
         ON DUPLICATE KEY UPDATE word_count=VALUES(word_count)
         """

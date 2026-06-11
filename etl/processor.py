@@ -13,30 +13,49 @@ class DataProcessor:
         self.output_dir = os.path.expanduser("~/output")
 
     def find_latest_snapshot(self) -> str:
-        pattern = f"{self.output_dir}/{self.date_str}_*"
+        # Crawler creates directories as YYYYMMDD (no underscore)
+        pattern = f"{self.output_dir}/{self.date_str}*"
         dirs = sorted(glob.glob(pattern))
         if not dirs:
             raise FileNotFoundError(f"No snapshot found for {self.date_str}")
         return dirs[-1]
 
     def load_video_details(self, snapshot_dir: str) -> list:
-        path = f"{snapshot_dir}/video_detail.ndjson"
         videos = []
-        with open(path, 'r') as f:
-            for line in f:
-                if line.strip():
-                    videos.append(json.loads(line))
+        video_dir = f"{snapshot_dir}/video_detail"
+        if not os.path.isdir(video_dir):
+            # Fallback: single file (legacy format)
+            path = f"{snapshot_dir}/video_detail.ndjson"
+            if os.path.exists(path):
+                with open(path, 'r') as f:
+                    for line in f:
+                        if line.strip():
+                            videos.append(json.loads(line))
+            return videos
+        for filepath in glob.glob(f"{video_dir}/*.ndjson"):
+            with open(filepath, 'r') as f:
+                for line in f:
+                    if line.strip():
+                        videos.append(json.loads(line))
         return videos
 
     def load_up_info(self, snapshot_dir: str) -> list:
-        path = f"{snapshot_dir}/up_info.ndjson"
         up_list = []
-        if not os.path.exists(path):
+        up_dir = f"{snapshot_dir}/up_info"
+        if not os.path.isdir(up_dir):
+            # Fallback: single file (legacy format)
+            path = f"{snapshot_dir}/up_info.ndjson"
+            if os.path.exists(path):
+                with open(path, 'r') as f:
+                    for line in f:
+                        if line.strip():
+                            up_list.append(json.loads(line))
             return up_list
-        with open(path, 'r') as f:
-            for line in f:
-                if line.strip():
-                    up_list.append(json.loads(line))
+        for filepath in glob.glob(f"{up_dir}/*.ndjson"):
+            with open(filepath, 'r') as f:
+                for line in f:
+                    if line.strip():
+                        up_list.append(json.loads(line))
         seen = set()
         deduped = []
         for up in up_list:
