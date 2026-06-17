@@ -1,0 +1,64 @@
+{
+  "db_name": "MySQL",
+  "query": "SELECT\n            bvid, title, view_count, heat_score, rank_position\n        FROM ads_hot_video_rank\n        WHERE category = ?\n        ORDER BY heat_score DESC\n        LIMIT 10",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "bvid",
+        "type_info": {
+          "type": "VarString",
+          "flags": "NOT_NULL | PRIMARY_KEY | NO_DEFAULT_VALUE",
+          "max_size": 128
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "title",
+        "type_info": {
+          "type": "VarString",
+          "flags": "",
+          "max_size": 2048
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "view_count",
+        "type_info": {
+          "type": "LongLong",
+          "flags": "",
+          "max_size": 20
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "heat_score",
+        "type_info": {
+          "type": "Double",
+          "flags": "",
+          "max_size": 22
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "rank_position",
+        "type_info": {
+          "type": "Long",
+          "flags": "",
+          "max_size": 11
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      true,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "118bfc0d4c9adc61f317b5d5ac910181554c94da42a6c65dccd2a705590f8291"
+}

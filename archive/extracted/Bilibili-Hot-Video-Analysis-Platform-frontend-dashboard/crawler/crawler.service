@@ -1,0 +1,17 @@
+[Unit]
+Description=B站热门视频采集
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/crawler
+EnvironmentFile=%h/crawler/.env
+ExecStart=/bin/bash %h/scripts/crawler_loop.sh
+Restart=always
+RestartSec=60
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target

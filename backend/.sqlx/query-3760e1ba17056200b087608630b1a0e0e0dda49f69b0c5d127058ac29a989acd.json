@@ -1,0 +1,104 @@
+{
+  "db_name": "MySQL",
+  "query": "SELECT\n            category,\n            CAST(COUNT(DISTINCT bvid) AS SIGNED) AS hot_video_count,\n            CAST(COALESCE(AVG(view_count), 0) AS SIGNED) AS avg_views,\n            CAST(COALESCE(AVG(like_count / NULLIF(view_count, 0)), 0) AS DOUBLE) AS avg_like_rate,\n            CAST(COALESCE(AVG(coin_count / NULLIF(view_count, 0)), 0) AS DOUBLE) AS avg_coin_rate,\n            CAST(COALESCE(AVG(favorite_count / NULLIF(view_count, 0)), 0) AS DOUBLE) AS avg_fav_rate,\n            COALESCE(MAX(view_count), 0) AS top_view_count,\n            CAST(COALESCE(SUM(view_count), 0) AS SIGNED) AS total_views,\n            CAST(COUNT(DISTINCT up_id) AS SIGNED) AS up_count\n        FROM hot_video\n        WHERE snapshot_date = (SELECT MAX(snapshot_date) FROM snapshot_dates)\n        GROUP BY category\n        ORDER BY total_views DESC",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "category",
+        "type_info": {
+          "type": "Blob",
+          "flags": "BLOB",
+          "max_size": 262140
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "hot_video_count",
+        "type_info": {
+          "type": "LongLong",
+          "flags": "NOT_NULL | BINARY",
+          "max_size": 21
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "avg_views",
+        "type_info": {
+          "type": "LongLong",
+          "flags": "NOT_NULL | BINARY",
+          "max_size": 21
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "avg_like_rate",
+        "type_info": {
+          "type": "Double",
+          "flags": "NOT_NULL | BINARY",
+          "max_size": 23
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "avg_coin_rate",
+        "type_info": {
+          "type": "Double",
+          "flags": "NOT_NULL | BINARY",
+          "max_size": 23
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "avg_fav_rate",
+        "type_info": {
+          "type": "Double",
+          "flags": "NOT_NULL | BINARY",
+          "max_size": 23
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "top_view_count",
+        "type_info": {
+          "type": "LongLong",
+          "flags": "NOT_NULL | BINARY",
+          "max_size": 20
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "total_views",
+        "type_info": {
+          "type": "LongLong",
+          "flags": "NOT_NULL | BINARY",
+          "max_size": 21
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "up_count",
+        "type_info": {
+          "type": "LongLong",
+          "flags": "NOT_NULL | BINARY",
+          "max_size": 21
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      true,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "3760e1ba17056200b087608630b1a0e0e0dda49f69b0c5d127058ac29a989acd"
+}

@@ -1,0 +1,20 @@
+flowchart LR
+    subgraph SRC["数据源头"]
+        A["🎬 Bilibili<br/>公开 API"]
+    end
+    subgraph COLLECT["采集与传输"]
+        B["🕷️ Rust 爬虫<br/>NDJSON 输出"] --> C["📤 HDFS 上传<br/>hdfs put"]
+    end
+    subgraph STORE["存储与计算"]
+        D["📦 Hive ODS<br/>外部表映射"] --> E["🔧 Spark ETL<br/>清洗转换"] --> F["📊 Hive DWS/ADS<br/>聚合分析"]
+    end
+    subgraph SERVE["服务与展示"]
+        G["🗄️ MySQL 8.0<br/>结果存储"] --> H["🔌 Axum API<br/>:9090"] --> I["🖥️ React 大屏<br/>:5173"]
+    end
+
+    SRC --> COLLECT --> STORE --> SERVE
+
+    style SRC fill:#E5668A15,stroke:#E5668A,stroke-width:2px
+    style COLLECT fill:#2EA9DF15,stroke:#2EA9DF,stroke-width:2px
+    style STORE fill:#E5668A15,stroke:#E5668A,stroke-width:2px
+    style SERVE fill:#2EA9DF15,stroke:#2EA9DF,stroke-width:2px

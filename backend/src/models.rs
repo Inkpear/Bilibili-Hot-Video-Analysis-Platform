@@ -26,17 +26,23 @@ pub struct OverviewData {
     pub up_count: i32,
     pub total_views: i64,
     pub total_interactions: i64,
+    pub total_likes: i64,
+    pub total_coins: i64,
+    pub total_favorites: i64,
     pub latest_snapshot_date: Option<String>,
     pub update_time: String,
 }
 
 #[derive(Debug, sqlx::FromRow)]
 pub struct OverviewRow {
-    pub video_count: Option<i32>,
-    pub category_count: Option<i32>,
-    pub up_count: Option<i32>,
+    pub video_count: Option<i64>,
+    pub category_count: Option<i64>,
+    pub up_count: Option<i64>,
     pub total_views: Option<i64>,
     pub total_interactions: Option<i64>,
+    pub total_likes: Option<i64>,
+    pub total_coins: Option<i64>,
+    pub total_favorites: Option<i64>,
     pub latest_snapshot_date: Option<String>,
     pub update_time: Option<String>,
 }
@@ -44,11 +50,14 @@ pub struct OverviewRow {
 impl From<OverviewRow> for OverviewData {
     fn from(row: OverviewRow) -> Self {
         Self {
-            video_count: row.video_count.unwrap_or(0),
-            category_count: row.category_count.unwrap_or(0),
-            up_count: row.up_count.unwrap_or(0),
+            video_count: row.video_count.unwrap_or(0) as i32,
+            category_count: row.category_count.unwrap_or(0) as i32,
+            up_count: row.up_count.unwrap_or(0) as i32,
             total_views: row.total_views.unwrap_or(0),
             total_interactions: row.total_interactions.unwrap_or(0),
+            total_likes: row.total_likes.unwrap_or(0),
+            total_coins: row.total_coins.unwrap_or(0),
+            total_favorites: row.total_favorites.unwrap_or(0),
             latest_snapshot_date: row.latest_snapshot_date,
             update_time: row.update_time.unwrap_or_default(),
         }
@@ -63,6 +72,9 @@ impl Default for OverviewData {
             up_count: 0,
             total_views: 0,
             total_interactions: 0,
+            total_likes: 0,
+            total_coins: 0,
+            total_favorites: 0,
             latest_snapshot_date: None,
             update_time: chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string(),
         }
@@ -141,33 +153,42 @@ pub struct PartitionCompareItem {
     pub top_view_count: i64,
     pub total_views: i64,
     pub up_count: i32,
+    pub total_likes: i64,
+    pub total_coins: i64,
+    pub total_favorites: i64,
 }
 
 #[derive(Debug, sqlx::FromRow)]
 pub struct PartitionCompareRow {
     pub category: Option<String>,
-    pub hot_video_count: Option<i32>,
+    pub hot_video_count: Option<i64>,
     pub avg_views: Option<i64>,
     pub avg_like_rate: Option<f64>,
     pub avg_coin_rate: Option<f64>,
     pub avg_fav_rate: Option<f64>,
     pub top_view_count: Option<i64>,
     pub total_views: Option<i64>,
-    pub up_count: Option<i32>,
+    pub up_count: Option<i64>,
+    pub total_likes: Option<i64>,
+    pub total_coins: Option<i64>,
+    pub total_favorites: Option<i64>,
 }
 
 impl From<PartitionCompareRow> for PartitionCompareItem {
     fn from(row: PartitionCompareRow) -> Self {
         Self {
             category: row.category.unwrap_or_default(),
-            hot_video_count: row.hot_video_count.unwrap_or(0),
+            hot_video_count: row.hot_video_count.unwrap_or(0) as i32,
             avg_views: row.avg_views.unwrap_or(0),
             avg_like_rate: row.avg_like_rate.unwrap_or(0.0),
             avg_coin_rate: row.avg_coin_rate.unwrap_or(0.0),
             avg_fav_rate: row.avg_fav_rate.unwrap_or(0.0),
             top_view_count: row.top_view_count.unwrap_or(0),
             total_views: row.total_views.unwrap_or(0),
-            up_count: row.up_count.unwrap_or(0),
+            up_count: row.up_count.unwrap_or(0) as i32,
+            total_likes: row.total_likes.unwrap_or(0),
+            total_coins: row.total_coins.unwrap_or(0),
+            total_favorites: row.total_favorites.unwrap_or(0),
         }
     }
 }
@@ -185,11 +206,11 @@ pub struct LifecyclePoint {
     pub snapshot_time: String,
     pub view_count: i64,
     pub like_count: i64,
-    pub rank_position: i32,
+    pub rank_position: i64,
     pub rank_source: String,
     pub rank_name: String,
     pub view_growth: i64,
-    pub rank_change: i32,
+    pub rank_change: i64,
 }
 
 #[derive(Debug, sqlx::FromRow)]
@@ -201,11 +222,11 @@ pub struct LifecycleRow {
     pub snapshot_time: Option<String>,
     pub view_count: Option<i64>,
     pub like_count: Option<i64>,
-    pub rank_position: Option<i32>,
+    pub rank_position: Option<i64>,
     pub rank_source: Option<String>,
     pub rank_name: Option<String>,
     pub view_growth: Option<i64>,
-    pub rank_change: Option<i32>,
+    pub rank_change: Option<i64>,
 }
 
 impl LifecycleRow {
@@ -241,7 +262,7 @@ pub struct LifecycleTopData {
 
 #[derive(Debug, sqlx::FromRow)]
 pub struct PartitionOverviewRow {
-    pub hot_video_count: Option<i32>,
+    pub hot_video_count: Option<i64>,
     pub avg_views: Option<i64>,
 }
 
@@ -260,7 +281,7 @@ pub struct PartitionDetailVideoRow {
     pub title: Option<String>,
     pub view_count: Option<i64>,
     pub heat_score: Option<f64>,
-    pub rank_position: Option<i32>,
+    pub rank_position: Option<i64>,
 }
 
 impl From<PartitionDetailVideoRow> for PartitionDetailVideo {
@@ -270,7 +291,7 @@ impl From<PartitionDetailVideoRow> for PartitionDetailVideo {
             title: row.title.unwrap_or_default(),
             view_count: row.view_count.unwrap_or(0),
             heat_score: row.heat_score.unwrap_or(0.0),
-            rank_position: row.rank_position.unwrap_or(0),
+            rank_position: row.rank_position.unwrap_or(0) as i32,
         }
     }
 }
@@ -382,6 +403,38 @@ impl From<InteractionRow> for InteractionData {
     }
 }
 
+// ---- /api/interaction-max ----
+
+#[derive(Debug, Serialize)]
+pub struct InteractionMaxData {
+    pub max_like_rate: f64,
+    pub max_coin_rate: f64,
+    pub max_fav_rate: f64,
+    pub max_reply_rate: f64,
+    pub max_share_rate: f64,
+}
+
+#[derive(Debug, sqlx::FromRow)]
+pub struct InteractionMaxRow {
+    pub max_like_rate: Option<f64>,
+    pub max_coin_rate: Option<f64>,
+    pub max_fav_rate: Option<f64>,
+    pub max_reply_rate: Option<f64>,
+    pub max_share_rate: Option<f64>,
+}
+
+impl From<InteractionMaxRow> for InteractionMaxData {
+    fn from(row: InteractionMaxRow) -> Self {
+        Self {
+            max_like_rate: row.max_like_rate.unwrap_or(0.0),
+            max_coin_rate: row.max_coin_rate.unwrap_or(0.0),
+            max_fav_rate: row.max_fav_rate.unwrap_or(0.0),
+            max_reply_rate: row.max_reply_rate.unwrap_or(0.0),
+            max_share_rate: row.max_share_rate.unwrap_or(0.0),
+        }
+    }
+}
+
 // ---- /api/word-cloud ----
 
 #[derive(Debug, Serialize)]
@@ -455,41 +508,119 @@ pub struct HotCommentsData {
 // ---- query parameters ----
 
 #[derive(Debug, serde::Deserialize)]
+pub struct SnapshotQuery {
+    pub snapshot_date: Option<String>,
+}
+
+#[derive(Debug, serde::Deserialize)]
 pub struct HotVideosQuery {
     pub sort: Option<String>,
     pub limit: Option<i64>,
     pub offset: Option<i64>,
+    pub category: Option<String>,
+    pub snapshot_date: Option<String>,
 }
 
 #[derive(Debug, serde::Deserialize)]
 pub struct LifecycleQuery {
     pub bvid: Option<String>,
+    pub snapshot_date: Option<String>,
 }
 
 #[derive(Debug, serde::Deserialize)]
 pub struct LifecycleTopQuery {
     pub limit: Option<i64>,
+    pub sort: Option<String>,
+    pub category: Option<String>,
+    pub snapshot_date: Option<String>,
 }
 
 #[derive(Debug, serde::Deserialize)]
 pub struct PartitionDetailQuery {
     pub category: Option<String>,
+    pub snapshot_date: Option<String>,
 }
 
 #[derive(Debug, serde::Deserialize)]
 pub struct InteractionQuery {
     pub bvid: Option<String>,
+    pub snapshot_date: Option<String>,
 }
 
 #[derive(Debug, serde::Deserialize)]
 pub struct WordCloudQuery {
     pub source: Option<String>,
     pub category: Option<String>,
+    pub bvid: Option<String>,
+    pub snapshot_date: Option<String>,
 }
+
+// ---- /api/word-trend ----
+
+#[derive(Debug, Serialize)]
+pub struct WordTrendItem {
+    pub word: String,
+    pub snapshot_date: String,
+    pub total_count: i64,
+    pub category: String,
+    pub source_type: String,
+}
+
+#[derive(Debug, sqlx::FromRow)]
+pub struct WordTrendRow {
+    pub word: Option<String>,
+    pub snapshot_date: Option<String>,
+    pub total_count: Option<i64>,
+    pub category: Option<String>,
+    pub source_type: Option<String>,
+}
+
+impl From<WordTrendRow> for WordTrendItem {
+    fn from(row: WordTrendRow) -> Self {
+        Self {
+            word: row.word.unwrap_or_default(),
+            snapshot_date: row.snapshot_date.unwrap_or_default(),
+            total_count: row.total_count.unwrap_or(0),
+            category: row.category.unwrap_or_default(),
+            source_type: row.source_type.unwrap_or_default(),
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+pub struct WordTrendData {
+    pub items: Vec<WordTrendItem>,
+}
+
+#[derive(Debug, serde::Deserialize)]
+pub struct WordTrendQuery {
+    pub word: Option<String>,
+    pub category: Option<String>,
+    pub source_type: Option<String>,
+    pub bvid: Option<String>,
+    pub snapshot_date: Option<String>,
+}
+
+// ---- /api/snapshot-dates ----
+
+#[derive(Debug, Serialize)]
+pub struct SnapshotDateItem {
+    pub snapshot_date: String,
+    pub video_count: i64,
+}
+
+#[derive(Debug, Serialize)]
+pub struct SnapshotDatesData {
+    pub dates: Vec<SnapshotDateItem>,
+}
+
+// ---- query parameters ----
 
 #[derive(Debug, serde::Deserialize)]
 pub struct HotCommentsQuery {
     pub category: Option<String>,
     pub bvid: Option<String>,
     pub limit: Option<i64>,
+    pub sort: Option<String>,
+    pub snapshot_date: Option<String>,
 }

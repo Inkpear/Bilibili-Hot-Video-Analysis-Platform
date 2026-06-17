@@ -10,8 +10,6 @@ mod models;
 
 #[tokio::main]
 async fn main() {
-    dotenvy::dotenv().ok();
-
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()
@@ -55,6 +53,18 @@ async fn main() {
         .route(
             "/api/interaction",
             axum::routing::get(handlers::interaction),
+        )
+        .route(
+            "/api/interaction-max",
+            axum::routing::get(handlers::interaction_max),
+        )
+        .route(
+            "/api/word-trend",
+            axum::routing::get(handlers::word_trend),
+        )
+        .route(
+            "/api/snapshot-dates",
+            axum::routing::get(handlers::snapshot_dates),
         );
 
     let app = Router::new()

@@ -1,0 +1,84 @@
+{
+  "db_name": "MySQL",
+  "query": "SELECT\n            video_count,\n            category_count,\n            up_count,\n            total_views,\n            total_interactions,\n            latest_snapshot_date,\n            DATE_FORMAT(update_time, '%Y-%m-%d %H:%i:%s') AS `update_time: String`\n        FROM ads_screen_overview\n        ORDER BY update_time DESC\n        LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "video_count",
+        "type_info": {
+          "type": "Long",
+          "flags": "",
+          "max_size": 11
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "category_count",
+        "type_info": {
+          "type": "Long",
+          "flags": "",
+          "max_size": 11
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "up_count",
+        "type_info": {
+          "type": "Long",
+          "flags": "",
+          "max_size": 11
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "total_views",
+        "type_info": {
+          "type": "LongLong",
+          "flags": "",
+          "max_size": 20
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "total_interactions",
+        "type_info": {
+          "type": "LongLong",
+          "flags": "",
+          "max_size": 20
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "latest_snapshot_date",
+        "type_info": {
+          "type": "VarString",
+          "flags": "",
+          "max_size": 32
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "update_time: String",
+        "type_info": {
+          "type": "VarString",
+          "flags": "",
+          "max_size": 96
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "0dbc1da41950ecb65e67e69fe88e883f3ebd2b445e7c7fd9a76d6d87747f73f6"
+}

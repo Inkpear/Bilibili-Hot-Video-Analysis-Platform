@@ -1,31 +1,15 @@
-use serde::Deserialize;
-
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Clone)]
 pub struct AppConfig {
-    #[allow(dead_code)]
-    pub database_url: String,
     pub api_token: Option<String>,
     pub bind: String,
 }
 
 impl AppConfig {
     pub fn load() -> Self {
-        let cfg = config::Config::builder()
-            .add_source(config::Environment::default().separator("__"))
-            .add_source(config::File::with_name("backend/config").required(false))
-            .set_default(
-                "database_url",
-                "mysql://hive:Hive@123456@127.0.0.1:3306/bilibili",
-            )
-            .unwrap()
-            .set_default("api_token", "")
-            .unwrap()
-            .set_default("bind", "0.0.0.0:3000")
-            .unwrap()
-            .build()
-            .expect("failed to build config");
-
-        cfg.try_deserialize().expect("failed to deserialize config")
+        Self {
+            api_token: std::env::var("API_TOKEN").ok().filter(|t| !t.is_empty()),
+            bind: std::env::var("BIND").unwrap_or_else(|_| "0.0.0.0:9090".to_string()),
+        }
     }
 
     pub fn auth_enabled(&self) -> bool {

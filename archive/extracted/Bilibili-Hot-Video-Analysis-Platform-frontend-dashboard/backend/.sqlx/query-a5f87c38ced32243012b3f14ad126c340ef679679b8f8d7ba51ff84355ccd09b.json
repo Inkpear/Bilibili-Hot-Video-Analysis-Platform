@@ -1,0 +1,64 @@
+{
+  "db_name": "MySQL",
+  "query": "SELECT DISTINCT\n            u.up_id,\n            u.up_name,\n            u.follower_count,\n            u.hot_video_count,\n            u.total_views\n        FROM ads_up_summary u\n        JOIN ads_hot_video_rank h ON h.up_name = u.up_name\n        WHERE h.category = ?\n        ORDER BY u.total_views DESC\n        LIMIT 10",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "up_id",
+        "type_info": {
+          "type": "VarString",
+          "flags": "NOT_NULL | PRIMARY_KEY | NO_DEFAULT_VALUE",
+          "max_size": 128
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "up_name",
+        "type_info": {
+          "type": "VarString",
+          "flags": "",
+          "max_size": 512
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "follower_count",
+        "type_info": {
+          "type": "LongLong",
+          "flags": "",
+          "max_size": 20
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "hot_video_count",
+        "type_info": {
+          "type": "LongLong",
+          "flags": "",
+          "max_size": 20
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "total_views",
+        "type_info": {
+          "type": "LongLong",
+          "flags": "",
+          "max_size": 20
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      true,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "a5f87c38ced32243012b3f14ad126c340ef679679b8f8d7ba51ff84355ccd09b"
+}

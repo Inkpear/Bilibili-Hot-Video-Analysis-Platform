@@ -1,0 +1,134 @@
+{
+  "db_name": "MySQL",
+  "query": "SELECT\n            bvid,\n            title,\n            category,\n            snapshot_date,\n            DATE_FORMAT(FROM_UNIXTIME(collect_time DIV 1000), '%H:%i') AS snapshot_time,\n            view_count,\n            like_count,\n            rank_position,\n            rank_source,\n            rank_name,\n            COALESCE(view_count - LAG(view_count) OVER (ORDER BY collect_time), 0) AS view_growth,\n            COALESCE(LAG(rank_position) OVER (ORDER BY collect_time) - rank_position, 0) AS rank_change\n        FROM hot_video\n        WHERE bvid = ?\n        ORDER BY collect_time ASC",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "bvid",
+        "type_info": {
+          "type": "Blob",
+          "flags": "BLOB",
+          "max_size": 262140
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "title",
+        "type_info": {
+          "type": "Blob",
+          "flags": "BLOB",
+          "max_size": 262140
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "category",
+        "type_info": {
+          "type": "Blob",
+          "flags": "BLOB",
+          "max_size": 262140
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "snapshot_date",
+        "type_info": {
+          "type": "Blob",
+          "flags": "NOT_NULL | BLOB | NO_DEFAULT_VALUE",
+          "max_size": 262140
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "snapshot_time",
+        "type_info": {
+          "type": "VarString",
+          "flags": "",
+          "max_size": 40
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "view_count",
+        "type_info": {
+          "type": "LongLong",
+          "flags": "",
+          "max_size": 20
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "like_count",
+        "type_info": {
+          "type": "LongLong",
+          "flags": "",
+          "max_size": 20
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "rank_position",
+        "type_info": {
+          "type": "LongLong",
+          "flags": "",
+          "max_size": 20
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "rank_source",
+        "type_info": {
+          "type": "Blob",
+          "flags": "BLOB",
+          "max_size": 262140
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "rank_name",
+        "type_info": {
+          "type": "Blob",
+          "flags": "BLOB",
+          "max_size": 262140
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "view_growth",
+        "type_info": {
+          "type": "LongLong",
+          "flags": "NOT_NULL | BINARY",
+          "max_size": 21
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "rank_change",
+        "type_info": {
+          "type": "LongLong",
+          "flags": "NOT_NULL | BINARY",
+          "max_size": 21
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true,
+      true,
+      true,
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "e5a44106017f71af73d34fa64c513d6fd1489e8ae298b409e7d75481edd10f80"
+}

@@ -1,0 +1,84 @@
+{
+  "db_name": "MySQL",
+  "query": "SELECT\n            CAST(COUNT(DISTINCT bvid) AS SIGNED) AS video_count,\n            CAST(COUNT(DISTINCT category) AS SIGNED) AS category_count,\n            CAST(COUNT(DISTINCT up_id) AS SIGNED) AS up_count,\n            CAST(COALESCE(SUM(view_count), 0) AS SIGNED) AS total_views,\n            CAST(COALESCE(SUM(like_count + coin_count + favorite_count + reply_count + share_count), 0) AS SIGNED) AS total_interactions,\n            (SELECT MAX(snapshot_date) FROM snapshot_dates) AS latest_snapshot_date,\n            DATE_FORMAT(FROM_UNIXTIME(MAX(collect_time) DIV 1000), '%Y-%m-%d %H:%i:%s') AS `update_time: String`\n        FROM hot_video\n        WHERE snapshot_date = (SELECT MAX(snapshot_date) FROM snapshot_dates)",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "video_count",
+        "type_info": {
+          "type": "LongLong",
+          "flags": "NOT_NULL | BINARY",
+          "max_size": 21
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "category_count",
+        "type_info": {
+          "type": "LongLong",
+          "flags": "NOT_NULL | BINARY",
+          "max_size": 21
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "up_count",
+        "type_info": {
+          "type": "LongLong",
+          "flags": "NOT_NULL | BINARY",
+          "max_size": 21
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "total_views",
+        "type_info": {
+          "type": "LongLong",
+          "flags": "NOT_NULL | BINARY",
+          "max_size": 21
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "total_interactions",
+        "type_info": {
+          "type": "LongLong",
+          "flags": "NOT_NULL | BINARY",
+          "max_size": 21
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "latest_snapshot_date",
+        "type_info": {
+          "type": "Blob",
+          "flags": "",
+          "max_size": 1048560
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "update_time: String",
+        "type_info": {
+          "type": "VarString",
+          "flags": "",
+          "max_size": 96
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true
+    ]
+  },
+  "hash": "647632ee6bf51c32835c2a6b73777fe889f63f8398f61b9fa5d1c393db5de8f5"
+}

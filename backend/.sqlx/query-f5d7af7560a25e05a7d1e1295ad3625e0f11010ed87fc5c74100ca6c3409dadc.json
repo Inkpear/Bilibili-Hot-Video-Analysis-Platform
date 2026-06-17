@@ -1,0 +1,64 @@
+{
+  "db_name": "MySQL",
+  "query": "SELECT DISTINCT\n            h.up_id,\n            COALESCE(u.up_name, h.up_name) AS up_name,\n            COALESCE(u.follower_count, 0) AS follower_count,\n            CAST(COUNT(DISTINCT h.bvid) AS SIGNED) AS hot_video_count,\n            CAST(SUM(h.view_count) AS SIGNED) AS total_views\n        FROM hot_video h\n        LEFT JOIN up_info u ON h.up_id = u.up_id AND h.snapshot_date = u.snapshot_date\n        WHERE h.category = ? AND h.snapshot_date = (SELECT MAX(snapshot_date) FROM snapshot_dates)\n        GROUP BY h.up_id, u.up_name, u.follower_count, h.up_name\n        ORDER BY total_views DESC\n        LIMIT 10",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "up_id",
+        "type_info": {
+          "type": "Blob",
+          "flags": "BLOB",
+          "max_size": 262140
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "up_name",
+        "type_info": {
+          "type": "Blob",
+          "flags": "",
+          "max_size": 1048560
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "follower_count",
+        "type_info": {
+          "type": "LongLong",
+          "flags": "NOT_NULL | BINARY",
+          "max_size": 20
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "hot_video_count",
+        "type_info": {
+          "type": "LongLong",
+          "flags": "NOT_NULL | BINARY",
+          "max_size": 21
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "total_views",
+        "type_info": {
+          "type": "LongLong",
+          "flags": "BINARY",
+          "max_size": 21
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true,
+      true,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "f5d7af7560a25e05a7d1e1295ad3625e0f11010ed87fc5c74100ca6c3409dadc"
+}

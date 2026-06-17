@@ -1,7 +1,7 @@
 use sqlx::mysql::MySqlPoolOptions;
 use sqlx::MySqlPool;
 
-const DEFAULT_DATABASE_URL: &str = "mysql://hive:Hive@123456@127.0.0.1:3306/bilibili";
+const DEFAULT_DATABASE_URL: &str = "mysql://root:root@127.0.0.1:3307/bilibili";
 
 pub async fn create_pool() -> Result<MySqlPool, sqlx::Error> {
     let database_url =
