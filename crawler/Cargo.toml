@@ -25,6 +25,9 @@ rand = "0.8"
 uuid = { version = "1", features = ["v4"] }
 hmac = "0.12"
 sha2 = "0.10"
+sqlx = { version = "0.9.0", features = ["mysql", "runtime-tokio"], default-features = false }
+jieba-rs = "0.10.1"
+regex = "1.12.4"
 
 [dev-dependencies]
 dotenv = "0.15"

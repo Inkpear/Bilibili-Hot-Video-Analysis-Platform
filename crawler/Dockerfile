@@ -1,4 +1,4 @@
-FROM rust:1.87-slim-bookworm AS chef
+FROM rust:1.94-slim-bookworm AS chef
 WORKDIR /app
 RUN apt-get update && apt-get install -y protobuf-compiler clang lld && rm -rf /var/lib/apt/lists/*
 RUN cargo install cargo-chef
@@ -16,8 +16,9 @@ COPY . .
 RUN cargo build --release --bin bilibili-crawler
 
 FROM debian:bookworm-slim AS runtime
-RUN apt-get update && apt-get install -y ca-certificates && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y ca-certificates tzdata && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY --from=builder /app/target/release/bilibili-crawler .
+COPY stopwords.txt .
 RUN mkdir -p /app/output /app/data
 ENTRYPOINT ["./bilibili-crawler"]

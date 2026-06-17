@@ -30,3 +30,9 @@ proxy = ""
 # bili_jct = ""
 # dede_user_id = ""
 # proxy = ""
+
+# ETL (crawl → MySQL)
+# [etl]
+# enabled = true
+# mysql_url = "mysql://root:root@127.0.0.1:3306/bilibili"
+# stopwords_path = "stopwords.txt"

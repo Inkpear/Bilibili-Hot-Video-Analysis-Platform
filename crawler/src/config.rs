@@ -9,6 +9,18 @@ pub struct Config {
     pub limits: LimitConfig,
     #[serde(default)]
     pub accounts: Vec<AccountConfig>,
+    #[serde(default)]
+    pub etl: Option<EtlConfig>,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct EtlConfig {
+    #[serde(default)]
+    pub enabled: bool,
+    pub mysql_url: String,
+    pub stopwords_path: String,
+    #[serde(default)]
+    pub snapshot_date: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -145,6 +157,7 @@ mod tests {
                 proxy: None,
                 user_agent: None,
             }],
+            etl: None,
         }
     }
 

@@ -55,6 +55,11 @@ impl StateManager {
             "ALTER TABLE collected_videos ADD COLUMN last_danmaku_seg INTEGER DEFAULT 0",
             [],
         );
+        // Add last_snapshot_date if missing
+        let _ = conn.execute(
+            "ALTER TABLE collected_videos ADD COLUMN last_snapshot_date TEXT DEFAULT ''",
+            [],
+        );
         Ok(())
     }
 
@@ -174,32 +179,32 @@ impl StateManager {
         Ok(conn.changes() > 0)
     }
 
-    pub fn mark_detail_done(&self, bvid: &str) -> Result<()> {
+    pub fn mark_detail_done(&self, bvid: &str, snapshot_id: &str) -> Result<()> {
         let now = Utc::now().timestamp();
         let conn = self.conn.lock().unwrap();
         conn.execute(
-            "UPDATE collected_videos SET has_detail = 1, updated_at = ?1 WHERE bvid = ?2",
-            params![now, bvid],
+            "UPDATE collected_videos SET has_detail = 1, updated_at = ?1, last_snapshot_date = ?2 WHERE bvid = ?3",
+            params![now, snapshot_id, bvid],
         )?;
         Ok(())
     }
 
-    pub fn mark_comments_done(&self, bvid: &str) -> Result<()> {
+    pub fn mark_comments_done(&self, bvid: &str, snapshot_id: &str) -> Result<()> {
         let now = Utc::now().timestamp();
         let conn = self.conn.lock().unwrap();
         conn.execute(
-            "UPDATE collected_videos SET has_comments = 1, updated_at = ?1 WHERE bvid = ?2",
-            params![now, bvid],
+            "UPDATE collected_videos SET has_comments = 1, updated_at = ?1, last_snapshot_date = ?2 WHERE bvid = ?3",
+            params![now, snapshot_id, bvid],
         )?;
         Ok(())
     }
 
-    pub fn mark_danmaku_done(&self, bvid: &str) -> Result<()> {
+    pub fn mark_danmaku_done(&self, bvid: &str, snapshot_id: &str) -> Result<()> {
         let now = Utc::now().timestamp();
         let conn = self.conn.lock().unwrap();
         conn.execute(
-            "UPDATE collected_videos SET has_danmaku = 1, updated_at = ?1 WHERE bvid = ?2",
-            params![now, bvid],
+            "UPDATE collected_videos SET has_danmaku = 1, updated_at = ?1, last_snapshot_date = ?2 WHERE bvid = ?3",
+            params![now, snapshot_id, bvid],
         )?;
         Ok(())
     }
@@ -376,13 +381,21 @@ impl StateManager {
     /// and the task loop's dedup handles re-fetched entries.
     ///
     /// UP info is tracked in `collected_ups` and unaffected by this reset.
-    pub fn reset_incomplete_flags(&self) -> Result<()> {
+    /// Reset collection flags for ranked videos that haven't been crawled for this snapshot.
+    /// This ensures full daily crawl while supporting resume-after-crash:
+    /// videos already crawled for this snapshot keep their flags.
+    pub fn reset_flags_for_stale_videos(&self, bvids: &[String], snapshot_id: &str) -> Result<()> {
         let conn = self.conn.lock().unwrap();
-        conn.execute(
-            "UPDATE collected_videos SET has_comments = 0, has_danmaku = 0
-             WHERE has_detail = 0",
-            [],
+        let mut stmt = conn.prepare(
+            "UPDATE collected_videos SET has_detail = 0, has_comments = 0, has_danmaku = 0
+             WHERE bvid = ?1 AND (last_snapshot_date IS NULL OR last_snapshot_date != ?2)"
         )?;
+        let mut reset_count = 0;
+        for bvid in bvids {
+            let rows = stmt.execute(params![bvid, snapshot_id])?;
+            reset_count += rows;
+        }
+        tracing::info!(total = bvids.len(), reset = reset_count, "reset flags for stale videos");
         Ok(())
     }
 

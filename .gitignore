@@ -10,3 +10,8 @@ config.toml
 config.docker.toml
 accounts.txt
 bilibili-API-collect/
+__pycache__/
+*.pyc
+*.pdf
+.claude/
+CLAUDE.md

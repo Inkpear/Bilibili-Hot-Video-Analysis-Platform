@@ -1,0 +1,22 @@
+flowchart TB
+    %% 第一阶段：排行榜采集
+    subgraph S1["第一阶段：排行榜采集"]
+        direction LR
+        A1["遍历 14 个<br/>内容分区"] --> A2["调用排行 API<br/>/ranking/v2"] --> A3["每分区获取<br/>100 条视频"] --> A4["bvid 去重<br/>~1400 条/天"]
+    end
+    %% 第二阶段：详情采集
+    subgraph S2["第二阶段：详情采集"]
+        direction LR
+        B1["并发获取<br/>视频详情"] --> B2["并发获取<br/>视频标签"] --> B3["并发获取<br/>UP 主信息"] --> B4["SQLite 状态机<br/>断点续爬"]
+    end
+    %% 第三阶段：互动采集
+    subgraph S3["第三阶段：互动数据采集"]
+        direction LR
+        C1["并发获取评论<br/>~200条/视频"] --> C2["Protobuf 解析<br/>弹幕数据"] --> C3["WBI v3 签名<br/>请求认证"] --> C4["失败重试<br/>最多10次 × 3轮"]
+    end
+
+    S1 --> S2 --> S3
+
+    style S1 fill:#2EA9DF10,stroke:#2EA9DF,stroke-width:2px
+    style S2 fill:#E5668A10,stroke:#E5668A,stroke-width:2px
+    style S3 fill:#2EA9DF10,stroke:#2EA9DF,stroke-width:2px

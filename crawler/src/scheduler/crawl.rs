@@ -116,31 +116,67 @@ pub async fn run_crawl(config: &Config, state: &Arc<StateManager>) -> Result<()>
     });
 
     state.create_snapshot(&snapshot_id)?;
-    state.reset_incomplete_flags()?;
-    info!(snapshot_id = %snapshot_id, "snapshot created, incomplete flags reset");
+    info!(snapshot_id = %snapshot_id, "snapshot created");
 
-    // 3. Phase 1: Fetch rankings with first worker
-    let first_worker = &workers[0];
-    let cookie = first_worker.cookie();
-
+    // 3. Phase 1: Fetch rankings — try each worker until one succeeds
     let ranking_span = info_span!("ranking");
     ranking_span.pb_set_length(ranking::PARTITION_RIDS.len() as u64);
     ranking_span.pb_set_style(
         &ProgressStyle::with_template("{prefix:>10} {bar} {pos}/{len} partitions").unwrap(),
     );
 
-    let ranked_videos = {
+    let mut ranked_videos = None;
+    let mut last_err = None;
+    let mut discarded_indices: Vec<usize> = Vec::new();
+
+    // Find the first worker that can fetch rankings; mark auth-failed ones
+    for (idx, worker) in workers.iter().enumerate() {
+        let cookie = worker.cookie();
         let _guard = ranking_span.enter();
-        ranking::fetch_all_rankings(
-            &first_worker.client,
+        match ranking::fetch_all_rankings(
+            &worker.client,
             &cookie,
             &config.api.base_url,
-            first_worker.wbi(),
+            worker.wbi(),
             0,
         )
-        .await?
-    };
+        .await
+        {
+            Ok(videos) => {
+                info!(worker = idx, count = videos.len(), "rankings fetched");
+                ranked_videos = Some(videos);
+                break;
+            }
+            Err(e) => {
+                let is_auth_err = matches!(&e, CrawlerError::Wbi(msg) if msg.contains("code=-101"));
+                if is_auth_err {
+                    warn!(worker = idx, error = %e, "worker cookie expired, removing from pool");
+                    discarded_indices.push(idx);
+                } else {
+                    warn!(worker = idx, error = %e, "ranking fetch failed, trying next worker");
+                }
+                last_err = Some(e);
+            }
+        }
+    }
     drop(ranking_span);
+
+    let ranked_videos = match ranked_videos {
+        Some(v) => v,
+        None => return Err(last_err.unwrap()),
+    };
+
+    // Filter out auth-failed workers, keep all others (including untested ones)
+    let workers: Vec<Worker> = workers
+        .into_iter()
+        .enumerate()
+        .filter(|(i, _)| !discarded_indices.contains(i))
+        .map(|(_, w)| w)
+        .collect();
+    info!(count = workers.len(), "valid workers remaining");
+    if workers.is_empty() {
+        return Err(CrawlerError::Config("no valid workers after auth check".into()));
+    }
 
     info!(count = ranked_videos.len(), "rankings fetched");
 
@@ -170,6 +206,11 @@ pub async fn run_crawl(config: &Config, state: &Arc<StateManager>) -> Result<()>
         total = ranked_videos.len(),
         "all videos registered in state"
     );
+
+    // Reset flags for ranked videos not yet updated today (supports resume-after-crash)
+    let ranked_bvids: Vec<String> = ranked_videos.iter().map(|rv| rv.bvid.clone()).collect();
+    state.reset_flags_for_stale_videos(&ranked_bvids, &snapshot_id)?;
+    info!(count = ranked_bvids.len(), "reset flags for full crawl");
 
     // 5. Phase 2: Semaphore + per-task spawn
     let concurrency = workers.len();
@@ -244,23 +285,63 @@ pub async fn run_crawl(config: &Config, state: &Arc<StateManager>) -> Result<()>
         );
     }
 
-    // 6. Wait for tasks in completion order — progress bar updates immediately
+    // 6. Wait for tasks in completion order — re-enqueue failed tasks
+    const MAX_RETRY_ROUNDS: u32 = 3;
     let mut success = 0u64;
-    let mut failed = 0u64;
+    let mut failed_tasks: Vec<Task> = Vec::new();
+    let mut retry_round = 0u32;
+    let mut total_progress = task_count as u64;
+
     while let Some(result) = join_set.join_next().await {
         match result {
-            Ok(Ok(())) => success += 1,
-            Ok(Err(e)) => {
-                warn!(error = %e, "task returned error");
-                failed += 1;
+            Ok((_, true)) => success += 1,
+            Ok((task, false)) => {
+                failed_tasks.push(task);
             }
             Err(e) => {
                 warn!(error = %e, "task panicked");
-                failed += 1;
             }
         }
         tasks_span.pb_inc(1);
     }
+
+    // Re-spawn failed tasks for additional retry rounds
+    while !failed_tasks.is_empty() && retry_round < MAX_RETRY_ROUNDS {
+        retry_round += 1;
+        let round_tasks = std::mem::take(&mut failed_tasks);
+        let count = round_tasks.len();
+        info!(round = retry_round, tasks = count, "re-spawning failed tasks");
+        total_progress += count as u64;
+        tasks_span.pb_set_length(total_progress);
+
+        for task in round_tasks {
+            spawn_task_into(
+                task,
+                &pool,
+                &semaphore,
+                state,
+                &writer,
+                &ctx,
+                max_retries,
+                &mut join_set,
+            );
+        }
+
+        while let Some(result) = join_set.join_next().await {
+            match result {
+                Ok((_, true)) => success += 1,
+                Ok((task, false)) => {
+                    failed_tasks.push(task);
+                }
+                Err(e) => {
+                    warn!(error = %e, "task panicked");
+                }
+            }
+            tasks_span.pb_inc(1);
+        }
+    }
+
+    let failed = failed_tasks.len() as u64;
 
     tasks_span.pb_set_finish_message(&format!("done ✓{} ✗{}", success, failed));
     drop(_tasks_guard);
@@ -291,6 +372,17 @@ pub async fn run_crawl(config: &Config, state: &Arc<StateManager>) -> Result<()>
         "crawl completed"
     );
 
+    // 8. ETL (if enabled)
+    if let Some(ref etl_config) = config.etl {
+        if etl_config.enabled {
+            info!("=== Starting ETL ===");
+            match crate::etl::run_etl(etl_config, &ctx.snapshot_dir, &snapshot_id).await {
+                Ok(()) => info!("=== ETL completed ==="),
+                Err(e) => error!(error = %e, "ETL failed"),
+            }
+        }
+    }
+
     Ok(())
 }
 
@@ -312,6 +404,11 @@ impl WorkerGuard {
         if let Some(w) = self.worker.take() {
             self.pool.lock().unwrap().push_back(w);
         }
+    }
+
+    /// Drop worker without returning to pool (for auth failures)
+    fn discard_worker(mut self) {
+        self.worker.take();
     }
 }
 
@@ -336,7 +433,7 @@ fn spawn_task_into(
     writer: &Arc<NdjsonWriter>,
     ctx: &Arc<SnapshotContext>,
     max_retries: u32,
-    join_set: &mut JoinSet<Result<()>>,
+    join_set: &mut JoinSet<(Task, bool)>,
 ) {
     let pool = pool.clone();
     let semaphore = semaphore.clone();
@@ -354,9 +451,10 @@ fn spawn_task_into(
         let mut rate_limit_count = 0u32;
 
         loop {
-            let permit = semaphore.acquire().await.map_err(|e| {
-                CrawlerError::Permanent(format!("semaphore closed: {e}"))
-            })?;
+            let permit = match semaphore.acquire().await {
+                Ok(p) => p,
+                Err(_) => return (task, false),
+            };
 
             let worker = pool.lock().unwrap().pop_front().expect("worker pool empty");
             let mut guard = WorkerGuard {
@@ -381,19 +479,30 @@ fn spawn_task_into(
                 Err(_) => worker.record_failure(),
             }
 
-            guard.return_worker();
+            // Check for auth error - discard worker to avoid risk control
+            let is_auth_err = match &result {
+                Err(CrawlerError::Api { code, .. }) if *code == -101 => true,
+                Err(CrawlerError::Wbi(msg)) if msg.contains("code=-101") => true,
+                _ => false,
+            };
+            if is_auth_err {
+                warn!(worker = guard.worker_mut().id, "worker auth failed, discarding from pool");
+                guard.discard_worker();
+            } else {
+                guard.return_worker();
+            }
             drop(permit);
 
             match result {
                 Ok(()) => {
                     info!("done");
-                    return Ok(());
+                    return (task, true);
                 }
                 Err(CrawlerError::RateLimited { retry_after }) => {
                     rate_limit_count += 1;
                     if rate_limit_count >= max_retries {
-                        warn!(count = rate_limit_count, "rate limit exceeded max retries, will retry next run");
-                        return Ok(());
+                        warn!(count = rate_limit_count, "rate limit exceeded max retries, will re-enqueue");
+                        return (task, false);
                     }
                     let cooldown = retry_after.unwrap_or(60);
                     warn!(cooldown = cooldown, count = rate_limit_count, "rate limited, retrying");
@@ -401,14 +510,14 @@ fn spawn_task_into(
                 }
                 Err(CrawlerError::Permanent(msg)) => {
                     warn!(reason = %msg, "permanent failure, skipping");
-                    mark_task_done(&task, &state);
-                    return Ok(());
+                    mark_task_done(&task, &state, &ctx.snapshot_id);
+                    return (task, true);
                 }
                 Err(e) => {
                     fail_count += 1;
                     if fail_count >= max_retries {
-                        error!(error = %e, fail_count = fail_count, "task failed permanently, will retry next run");
-                        return Ok(());
+                        error!(error = %e, fail_count = fail_count, "task failed, will re-enqueue");
+                        return (task, false);
                     }
                     warn!(error = %e, fail_count = fail_count, "retrying task");
                     let delay = rand::random::<u64>() % 2000;
@@ -441,7 +550,7 @@ async fn execute_task(
                 Ok(tags) if !tags.is_empty() => detail.tags = tags,
                 _ => {}
             }
-            state.mark_detail_done(bvid)?;
+            state.mark_detail_done(bvid, &ctx.snapshot_id)?;
 
             let merged = build_video_detail(ranked, &detail, ctx);
             writer.write_ndjson(
@@ -494,7 +603,7 @@ async fn execute_task(
                     &new_comments,
                 )?;
             }
-            state.mark_comments_done(bvid)?;
+            state.mark_comments_done(bvid, &ctx.snapshot_id)?;
             Ok(())
         }
 
@@ -533,7 +642,7 @@ async fn execute_task(
             state.update_danmaku_seg(bvid, last_seg)?;
             let total = existing.len() + new_danmaku.len();
             if total >= 3000 || last_seg > 0 {
-                state.mark_danmaku_done(bvid)?;
+                state.mark_danmaku_done(bvid, &ctx.snapshot_id)?;
             }
             Ok(())
         }
@@ -544,12 +653,12 @@ async fn execute_task(
 // Helpers
 // ---------------------------------------------------------------------------
 
-fn mark_task_done(task: &Task, state: &Arc<StateManager>) {
+fn mark_task_done(task: &Task, state: &Arc<StateManager>, snapshot_id: &str) {
     let result = match task {
-        Task::VideoDetail { bvid, .. } => state.mark_detail_done(bvid),
+        Task::VideoDetail { bvid, .. } => state.mark_detail_done(bvid, snapshot_id),
         Task::UpInfo { up_id, .. } => state.mark_up_collected(up_id),
-        Task::Comments { bvid, .. } => state.mark_comments_done(bvid),
-        Task::Danmaku { bvid, .. } => state.mark_danmaku_done(bvid),
+        Task::Comments { bvid, .. } => state.mark_comments_done(bvid, snapshot_id),
+        Task::Danmaku { bvid, .. } => state.mark_danmaku_done(bvid, snapshot_id),
     };
     if let Err(e) = result {
         tracing::error!(error = %e, "failed to mark task done");

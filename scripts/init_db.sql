@@ -75,7 +75,8 @@ CREATE TABLE comment_info (
     reply_count INT DEFAULT 0,
     comment_time BIGINT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (comment_id, snapshot_date)
+    PRIMARY KEY (comment_id, snapshot_date),
+    KEY idx_cmt_date_likes (snapshot_date(8), like_count)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- 弹幕表
@@ -84,7 +85,7 @@ CREATE TABLE danmaku_info (
     snapshot_date VARCHAR(8) NOT NULL,
     bvid VARCHAR(20),
     cid BIGINT,
-    content VARCHAR(1000),
+    content TEXT,
     video_time DECIMAL(10, 3),
     mode INT,
     fontsize INT,
@@ -101,7 +102,7 @@ CREATE TABLE word_cloud_title (
     word VARCHAR(100) NOT NULL,
     snapshot_date VARCHAR(8) NOT NULL,
     word_count INT DEFAULT 1,
-    category VARCHAR(50),
+    sub_category VARCHAR(50),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (bvid, word, snapshot_date)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
@@ -112,7 +113,7 @@ CREATE TABLE word_cloud_comment (
     word VARCHAR(100) NOT NULL,
     snapshot_date VARCHAR(8) NOT NULL,
     word_count INT DEFAULT 1,
-    category VARCHAR(50),
+    sub_category VARCHAR(50),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (bvid, word, snapshot_date)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
@@ -123,7 +124,7 @@ CREATE TABLE word_cloud_danmaku (
     word VARCHAR(100) NOT NULL,
     snapshot_date VARCHAR(8) NOT NULL,
     word_count INT DEFAULT 1,
-    category VARCHAR(50),
+    sub_category VARCHAR(50),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (bvid, word, snapshot_date)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
@@ -143,6 +144,8 @@ CREATE TABLE word_trend (
 CREATE TABLE snapshot_dates (
     snapshot_date VARCHAR(8) NOT NULL,
     video_count INT DEFAULT 0,
+    comment_count INT DEFAULT 0,
+    danmaku_count INT DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (snapshot_date)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

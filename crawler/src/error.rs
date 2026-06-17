@@ -17,6 +17,9 @@ pub enum CrawlerError {
     #[error("Database error: {0}")]
     Db(#[from] rusqlite::Error),
 
+    #[error("MySQL error: {0}")]
+    Mysql(#[from] sqlx::Error),
+
     #[error("WBI signing error: {0}")]
     Wbi(String),
 

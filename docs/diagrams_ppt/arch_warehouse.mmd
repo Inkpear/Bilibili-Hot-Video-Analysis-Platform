@@ -1,0 +1,26 @@
+flowchart TB
+    subgraph L1["📦 ODS 操作数据层"]
+        direction LR
+        O1["外部表映射"] --- O2["HDFS 原始文件"] --- O3["JsonSerDe 解析"] --- O4["保留全部原始数据"]
+    end
+    subgraph L2["🔧 DWD 明细数据层"]
+        direction LR
+        D1["JSON → 结构化列"] --- D2["(bvid,date) 去重"] --- D3["缺失值填充"] --- D4["字段类型统一"]
+    end
+    subgraph L3["📊 DWS 服务数据层"]
+        direction LR
+        W1["计算互动率指标"] --- W2["分区/日期聚合"] --- W3["每日总量汇总"] --- W4["轻度汇总宽表"]
+    end
+    subgraph L4["🎯 ADS 应用数据层"]
+        direction LR
+        A1["热度评分排名表"] --- A2["分区对比统计表"] --- A3["词频趋势分析表"] --- A4["对接后端 API"]
+    end
+
+    L1 -->|"清洗 · 解析"| L2
+    L2 -->|"聚合 · 统计"| L3
+    L3 -->|"面向场景"| L4
+
+    style L1 fill:#2EA9DF15,stroke:#2EA9DF,stroke-width:2px
+    style L2 fill:#E5668A15,stroke:#E5668A,stroke-width:2px
+    style L3 fill:#2EA9DF15,stroke:#2EA9DF,stroke-width:2px
+    style L4 fill:#E5668A15,stroke:#E5668A,stroke-width:2px

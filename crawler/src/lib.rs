@@ -1,6 +1,7 @@
 pub mod api;
 pub mod config;
 pub mod error;
+pub mod etl;
 pub mod fingerprint;
 pub mod models;
 pub mod protos;

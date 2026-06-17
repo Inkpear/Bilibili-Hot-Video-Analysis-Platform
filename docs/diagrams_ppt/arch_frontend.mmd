@@ -1,0 +1,26 @@
+flowchart TB
+    subgraph API["🔌 Axum REST API — 13 个端点"]
+        direction LR
+        AP1["/api/overview"] --- AP2["/api/hot-videos"] --- AP3["/api/partition-compare"] --- AP4["/api/lifecycle"]
+    end
+    subgraph OVERVIEW["📄 总览视图 Overview"]
+        direction LR
+        OV1["KPI 指标卡"] --- OV2["分区热度柱状图"] --- OV3["热门视频排行榜"] --- OV4["生命周期曲线"]
+    end
+    subgraph OVERVIEW2[" "]
+        direction LR
+        OV5["词云图<br/>标题/评论/弹幕"] --- OV6["热门评论列表"] --- OV7["互动率雷达图"]
+    end
+    subgraph ANALYSIS["📄 分析视图 Analysis"]
+        direction LR
+        AN1["分区指标矩阵<br/>热力图"] --- AN2["词频变化趋势<br/>折线图"] --- AN3["分区详情面板"]
+    end
+
+    API --> OVERVIEW
+    API --> ANALYSIS
+    OVERVIEW --> OVERVIEW2
+
+    style API fill:#33415515,stroke:#334155,stroke-width:2px
+    style OVERVIEW fill:#2EA9DF15,stroke:#2EA9DF,stroke-width:2px
+    style OVERVIEW2 fill:#2EA9DF08,stroke:#2EA9DF,stroke-width:1px,stroke-dasharray:5
+    style ANALYSIS fill:#E5668A15,stroke:#E5668A,stroke-width:2px

@@ -38,6 +38,9 @@ async fn main() -> Result<()> {
         .init();
 
     let run_now = std::env::args().any(|a| a == "--now");
+    let etl_test_date = std::env::args()
+        .position(|a| a == "--etl-test")
+        .and_then(|i| std::env::args().nth(i + 1));
 
     let config = Config::load()?;
     info!(
@@ -48,6 +51,17 @@ async fn main() -> Result<()> {
     );
 
     let state = Arc::new(StateManager::new(&config.crawler.db_path)?);
+
+    if let Some(date) = etl_test_date {
+        let etl_config = config.etl.as_ref().expect("ETL config required for --etl-test");
+        let snapshot_dir = std::path::PathBuf::from(&config.crawler.output_dir).join(&date);
+        info!(date = %date, dir = %snapshot_dir.display(), "running ETL test");
+        match bilibili_crawler::etl::run_etl(etl_config, &snapshot_dir, &date).await {
+            Ok(()) => info!("ETL completed"),
+            Err(e) => error!(error = %e, "ETL failed"),
+        }
+        return Ok(());
+    }
 
     if run_now {
         // Run once and exit
